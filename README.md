@@ -1,6 +1,8 @@
 # Java Query Engine
 
 ![CI](https://github.com/JinBa1/java-query-engine/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://codecov.io/gh/JinBa1/java-query-engine/branch/main/graph/badge.svg)
+![Dependencies](https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen)
 
 An in-memory relational query engine built on the Volcano/iterator model. Parses SQL via JSqlParser, builds an operator tree, and executes queries tuple-by-tuple against CSV data.
 
