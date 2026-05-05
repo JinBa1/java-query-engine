@@ -150,14 +150,6 @@ public class ProjectOperator extends Operator {
 
         this.indicesResolved = false; // This is crucial!
 
-//        this.schemaRegistered = false;
-//
-//        // Propagate to child
-//        if (this.hasChild()) {
-//            this.child.updateSchema();
-//        }
-//
-//        registerSchema();
         super.updateSchema();
     }
 }

@@ -5,14 +5,14 @@
 **Branch:** main
 
 ## OVERVIEW
-BlazeDB — in-memory relational query engine (Volcano/iterator model). Java 8 / Maven coursework. Parses SQL via JSqlParser, builds operator tree, executes tuple-at-a-time.
+BlazeDB — in-memory relational query engine (Volcano/iterator model). Java 17 / Maven / JUnit 5. Parses SQL via JSqlParser, builds operator tree, executes tuple-at-a-time.
 
 ## STRUCTURE
 ```
 .
-├── src/main/java/ed/inf/adbs/blazedb/     # Core domain (13 files)
+├── src/main/java/com/github/jinba1/blazedb/     # Core domain (13 files)
 │   └── operator/                            # Volcano operators (8 files)
-├── src/test/java/ed/inf/adbs/blazedb/      # JUnit 4 tests (10 files)
+├── src/test/java/com/github/jinba1/blazedb/      # JUnit 5 tests (15 files)
 ├── samples/                                 # SQL queries + expected output + DB data
 │   ├── db/schema.txt                        # Table schemas
 │   ├── db/data/                             # CSV data files
@@ -67,7 +67,7 @@ mvn test
 mvn clean compile assembly:single
 
 # Run
-java -cp target/blazedb-1.0.0-jar-with-dependencies.jar ed.inf.adbs.blazedb.BlazeDB samples/db samples/input/query1.sql output.csv
+java -cp target/blazedb-1.0.0-jar-with-dependencies.jar com.github.jinba1.blazedb.BlazeDB samples/db samples/input/query1.sql output.csv
 ```
 
 ## NOTES

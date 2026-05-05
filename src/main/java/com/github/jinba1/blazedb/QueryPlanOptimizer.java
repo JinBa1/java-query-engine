@@ -51,38 +51,7 @@ public class QueryPlanOptimizer {
         // Finally, remove unnecessary operators
         rootOp = removeUnnecessaryProjects(rootOp);
         rootOp = removeUnnecessarySelects(rootOp);
-        // Verify schema consistency after all optimizations
-//        verifySchemaConsistency(rootOp);
         return rootOp;
-    }
-
-    /**
-     * Verifies schema consistency across the query plan.
-     * Logs operator schema information for debugging purposes.
-     * @param op The operator to verify
-     */
-    private static void verifySchemaConsistency(Operator op) {
-        if (op == null) return;
-
-        String schemaId = op.propagateSchemaId();
-        System.out.println("Operator " + op.getClass().getSimpleName() +
-                " has schema ID: " + schemaId);
-
-        if (op instanceof SelectOperator) {
-            SelectOperator selectOp = (SelectOperator) op;
-            System.out.println("  Select condition: " + selectOp.getCondition());
-        }
-
-        if (op instanceof JoinOperator) {
-            JoinOperator joinOp = (JoinOperator) op;
-            System.out.println("  Join condition: " + joinOp.getJoinCondition());
-            System.out.println("  Outer child schema: " + joinOp.getOuterChild().propagateSchemaId());
-            verifySchemaConsistency(joinOp.getOuterChild());
-        }
-
-        if (op.hasChild()) {
-            verifySchemaConsistency(op.getChild());
-        }
     }
 
     /**
@@ -767,7 +736,6 @@ public class QueryPlanOptimizer {
         // If we're not selecting all columns, add a projection
         Map<String, Integer> tableSchema = DBCatalog.getInstance().getDBSchemata(tableName);
         if (tableColumns.size() < tableSchema.size()) {
-//                    " with columns: " + tableColumns);
             return new ProjectOperator(scanOp, tableColumns);
         }
 

@@ -14,7 +14,7 @@ import java.util.*;
  * Integration tests for BlazeDB.
  * Tests the program as a whole using the command-line interface.
  *
- * These tests cover all the query types supported by BlazeDB as per the coursework requirements:
+ * These tests cover all the query types supported by BlazeDB as per the project requirements:
  * - Simple SELECT-FROM-WHERE queries
  * - Joins
  * - DISTINCT
@@ -23,7 +23,7 @@ import java.util.*;
  * - SUM aggregates
  * - Various combinations of the above
  *
- * Note: All column names in the test database are single letters as per the coursework spec,
+ * Note: All column names in the test database are single letters as per the specification,
  * and all attribute values are integers. The schema is as follows:
  *
  * Student: A B C D (where A is student ID, B is name code, C is age, D is GPA*10)
@@ -594,7 +594,7 @@ public class BlazeDBTest {
 
 
 	/**
-	 * Test all sample queries provided with the coursework.
+	 * Test all sample queries provided as sample queries.
 	 * This test runs all SQL queries in the samples/input directory and
 	 * compares the results with the expected outputs in samples/expected_output.
 	 */

@@ -45,8 +45,6 @@ public class QueryPlanner {
 
             if (statement != null) {
                 Select select = (Select) statement;
-                logQueryDetails(select);
-
                 // Create scan operator for the first table
                 rootOp = createScanOperator(select);
 
@@ -77,37 +75,10 @@ public class QueryPlanner {
 
         // Apply query optimization if enabled
         if (Constants.useQueryOptimization) {
-            System.out.println("Applying query plan optimization...");
-            System.out.println("Original plan:");
-            printQueryPlan(rootOp, 0);
-
             rootOp = QueryPlanOptimizer.optimize(rootOp);
-
-            System.out.println("Optimized plan:");
-            printQueryPlan(rootOp, 0);
         }
 
         return rootOp;
-    }
-
-    /**
-     * Logs details about the parsed SQL query for debugging purposes.
-     * @param select The SQL SELECT statement to log
-     */
-    private static void logQueryDetails(Select select) {
-        System.out.println("Statement: " + select);
-        System.out.println("SELECT items: " + select.getPlainSelect().getSelectItems());
-        System.out.println("WHERE expression: " + select.getPlainSelect().getWhere());
-        Table firstTable = (Table) select.getPlainSelect().getFromItem();
-        System.out.println("From Item: " + firstTable.getName());
-
-        if (existSortOp(select)) {
-            System.out.println("Order by: " + (select.getPlainSelect().getOrderByElements()).get(0).getExpression());
-        }
-        System.out.println("Distinct: " + select.getPlainSelect().getDistinct());
-        if (existGroupByOp(select)) {
-            System.out.println("Group by: " + select.getPlainSelect().getGroupBy().getGroupByExpressions());
-        }
     }
 
     /**
@@ -525,36 +496,6 @@ public class QueryPlanner {
         }
 
         return result;
-    }
-
-    /**
-     * Prints a query plan tree for debugging purposes.
-     * @param op The root operator of the plan
-     * @param indent The indentation level
-     */
-    private static void printQueryPlan(Operator op, int indent) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < indent; i++) {
-            sb.append("  ");
-        }
-        sb.append("- ").append(op.getClass().getSimpleName());
-
-        if(op instanceof ProjectOperator) {
-            sb.append(" column: ").append(((ProjectOperator) op).getColumns().toString());
-        }
-
-        System.out.println(sb.toString());
-
-        // Print child operators
-        if (op.hasChild()) {
-            printQueryPlan(op.getChild(), indent + 1);
-        }
-
-        // Handle JoinOperator's outer child
-        if (op instanceof JoinOperator) {
-            JoinOperator joinOp = (JoinOperator) op;
-            printQueryPlan(joinOp.getOuterChild(), indent + 1);
-        }
     }
 
     /**

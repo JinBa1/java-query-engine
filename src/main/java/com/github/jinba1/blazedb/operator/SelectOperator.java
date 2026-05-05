@@ -113,16 +113,6 @@ public class SelectOperator extends Operator {
      */
     @Override
     public void updateSchema() {
-//        // Reset registration flag
-//        this.schemaRegistered = false;
-//
-//        // Update child first
-//        if (this.child != null) {
-//            this.child.updateSchema();
-//        }
-//
-//        // Re-register schema
-//        registerSchema();
         super.updateSchema();
 
         // CRITICAL FIX: Recreate evaluator with updated schema ID
