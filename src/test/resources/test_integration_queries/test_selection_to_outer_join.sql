@@ -1,0 +1,1 @@
+SELECT Student.A, Course.E FROM Student, Course WHERE Student.A = Course.E AND Student.D > 30;

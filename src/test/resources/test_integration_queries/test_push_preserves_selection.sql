@@ -1,0 +1,1 @@
+SELECT Student.A FROM Student WHERE Student.D > 30 AND Student.C < 30;

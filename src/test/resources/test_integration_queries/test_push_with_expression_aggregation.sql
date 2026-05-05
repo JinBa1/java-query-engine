@@ -1,0 +1,1 @@
+SELECT Student.D, SUM(Student.C*Enrolled.K) FROM Student, Enrolled WHERE Student.A = Enrolled.I GROUP BY Student.D;

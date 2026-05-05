@@ -1,0 +1,1 @@
+SELECT Course.H, SUM(Enrolled.K) FROM Course, Enrolled WHERE Course.E = Enrolled.J GROUP BY Course.H;

@@ -1,0 +1,1 @@
+SELECT Student.A, Student.B, Course.F, Enrolled.K FROM Student, Enrolled, Course WHERE Student.A = Enrolled.I AND Enrolled.J = Course.E AND Student.D = 40 AND Enrolled.K > 80;

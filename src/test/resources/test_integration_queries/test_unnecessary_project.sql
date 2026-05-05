@@ -1,0 +1,1 @@
+SELECT Student.A, Student.B, Student.C, Student.D FROM Student;

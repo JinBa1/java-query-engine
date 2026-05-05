@@ -1,0 +1,1 @@
+SELECT * FROM Student, Enrolled WHERE Student.A = Enrolled.I AND Student.D > 30;

@@ -1,0 +1,1 @@
+SELECT Student.A, Student.D FROM Student ORDER BY Student.D;

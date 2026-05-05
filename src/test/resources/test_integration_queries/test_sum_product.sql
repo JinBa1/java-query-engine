@@ -1,0 +1,1 @@
+SELECT SUM(Student.C*Student.D) FROM Student;

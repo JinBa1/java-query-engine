@@ -1,0 +1,1 @@
+SELECT SUM(Student.C) FROM Student;

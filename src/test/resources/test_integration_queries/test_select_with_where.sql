@@ -1,0 +1,1 @@
+SELECT Student.A, Student.B, Student.D FROM Student WHERE Student.D > 30;

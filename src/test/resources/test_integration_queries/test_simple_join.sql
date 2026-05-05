@@ -1,0 +1,1 @@
+SELECT Student.A, Student.B, Enrolled.J, Enrolled.K FROM Student, Enrolled WHERE Student.A = Enrolled.I;

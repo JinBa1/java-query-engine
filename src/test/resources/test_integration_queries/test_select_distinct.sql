@@ -1,0 +1,1 @@
+SELECT DISTINCT Student.D FROM Student;

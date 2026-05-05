@@ -1,0 +1,1 @@
+SELECT Student.D, SUM(Student.C) FROM Student WHERE 1 = 1 GROUP BY Student.D;
