@@ -5,12 +5,12 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.github.jinba1</groupId>
-  <artifactId>blazedb</artifactId>
+  <artifactId>java-query-engine</artifactId>
   <packaging>jar</packaging>
   <version>1.0.0</version>
 
-  <name>BlazeDB</name>
-  <url>https://github.com/JinBa1/ADS-CW</url>
+  <name>Java Query Engine</name>
+  <url>https://github.com/JinBa1/java-query-engine</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
