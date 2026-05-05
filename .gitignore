@@ -1,8 +1,4 @@
 target/
-.idea/
 *.iml
-.claude/
-.sisyphus/
-REPORT_*.md
 .DS_Store
 *.class
