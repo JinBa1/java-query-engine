@@ -1,12 +1,8 @@
-# BlazeDB — Java Relational Query Engine
+# Java Query Engine
 
-![CI](https://github.com/JinBa1/ADS-CW/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/JinBa1/java-query-engine/actions/workflows/ci.yml/badge.svg)
 
-BlazeDB is an in-memory relational query engine built on the Volcano/iterator model. It parses SQL statements via JSqlParser, constructs an operator tree, and executes queries tuple-by-tuple against CSV data files.
-
-## Overview
-
-The engine reads a SQL query and a directory of CSV tables, plans and optimises the query, then streams results through a pipeline of operators. Each operator exposes `getNextTuple()` and `reset()`, following the classic Volcano execution model. All values are integers.
+An in-memory relational query engine built on the Volcano/iterator model. Parses SQL via JSqlParser, builds an operator tree, and executes queries tuple-by-tuple against CSV data.
 
 ## Architecture
 
@@ -29,18 +25,30 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 `ScanOperator` → `SelectOperator` → `ProjectOperator` → `JoinOperator` → `SortOperator` → `SumOperator` → `DuplicateEliminationOperator`
 
-## Supported SQL Features
+## Feature Matrix
 
-| Feature | Example |
-|---------|---------|
-| `SELECT *` | `SELECT * FROM Student;` |
-| Projection | `SELECT Student.D, Student.B FROM Student;` |
-| `WHERE` filter | `SELECT * FROM Student WHERE Student.A = 1;` |
-| Inner join | `SELECT * FROM Student, Enrolled WHERE Student.A = Enrolled.A;` |
-| `ORDER BY` | `SELECT * FROM Student ORDER BY Student.B;` |
-| `GROUP BY` + `SUM` | `SELECT SUM(1) FROM Student GROUP BY Student.B;` |
-| `DISTINCT` | `SELECT DISTINCT Student.A FROM Student;` |
-| Nested expressions | Arithmetic and comparison expressions in WHERE/HAVING |
+| Feature | Status |
+|---------|--------|
+| `SELECT *` / projection | ✅ Supported |
+| `WHERE` predicates | ✅ Supported |
+| Inner joins (nested-loop) | ✅ Supported |
+| `ORDER BY` | ✅ Supported |
+| `GROUP BY` + `SUM` | ✅ Supported |
+| `DISTINCT` | ✅ Supported |
+| Nested arithmetic/comparison expressions | ✅ Supported |
+| Query optimisation (selection pushdown) | ✅ Supported |
+| Indexes | ❌ Not supported |
+| Transactions | ❌ Not supported |
+| INSERT / UPDATE / DELETE | ❌ Not supported |
+| Concurrency | ❌ Not supported |
+| Persistence | ❌ Not supported |
+| Full SQL dialect | ❌ Not supported |
+
+## Scope
+
+This engine supports **SQL-over-CSV query execution**: read-only queries against tables stored as CSV files. It does not support transactions, indexes, data modification (INSERT/UPDATE/DELETE), concurrency, persistence, or a full SQL dialect. All values are integers.
+
+The focus is on demonstrating query planning, optimisation, and the Volcano iterator execution model.
 
 ## Quick Start
 
@@ -48,8 +56,8 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 ```bash
 # Clone
-git clone https://github.com/JinBa1/ADS-CW.git
-cd ADS-CW
+git clone https://github.com/JinBa1/java-query-engine.git
+cd java-query-engine
 
 # Build fat JAR
 ./mvnw clean compile assembly:single
@@ -58,9 +66,43 @@ cd ADS-CW
 **Run a query:**
 
 ```bash
-java -cp target/blazedb-1.0.0-jar-with-dependencies.jar \
+java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.blazedb.BlazeDB \
   samples/db samples/input/query1.sql output.csv
+```
+
+## Demo
+
+**Input table** (`samples/db/data/Student.csv`):
+
+```
+1, 200, 50, 33
+2, 200, 200, 44
+3, 100, 105, 44
+4, 100, 50, 11
+5, 100, 500, 22
+6, 300, 400, 11
+```
+
+**Query** (`samples/input/query4.sql`):
+
+```sql
+SELECT * FROM Student WHERE Student.A < 3;
+```
+
+**Command:**
+
+```bash
+java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
+  com.github.jinba1.blazedb.BlazeDB \
+  samples/db samples/input/query4.sql output.csv
+```
+
+**Output** (`output.csv`):
+
+```
+1, 200, 50, 33
+2, 200, 200, 44
 ```
 
 ## Running Examples
@@ -70,7 +112,7 @@ The `samples/` directory ships with 12 queries and a small dataset (Student, Cou
 ```bash
 # Run all sample queries and diff against expected output
 for i in $(seq 1 12); do
-  java -cp target/blazedb-1.0.0-jar-with-dependencies.jar \
+  java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
     com.github.jinba1.blazedb.BlazeDB \
     samples/db "samples/input/query${i}.sql" "/tmp/out${i}.csv"
   diff "samples/expected_output/query${i}.csv" "/tmp/out${i}.csv" && echo "query${i}: OK"
@@ -83,7 +125,7 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios.
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (190 tests).
 
 ## Project Structure
 
@@ -103,7 +145,7 @@ The test suite covers individual operators, the query planner, the optimiser, ex
 
 ## Background
 
-Originally developed as coursework for the Advanced Database Systems course at the University of Edinburgh, subsequently extended with additional query optimisation and expanded test coverage.
+Originally built as a university project for the Advanced Database Systems course at the University of Edinburgh, subsequently extended with additional query optimisation and expanded test coverage.
 
 ## License
 
