@@ -28,11 +28,29 @@ public abstract class Operator {
     protected String intermediateSchemaId = null;
     protected boolean schemaRegistered = false;
 
+    // Tuple counter for performance benchmarking
+    protected long tupleCounter = 0;
+
     /**
      * Retrieves the next tuple from the iterator.
      * @return A Tuple object representing the row of data, or NULL if EOF reached.
      */
     public abstract Tuple getNextTuple();
+
+    /**
+     * Gets the number of tuples processed by this operator.
+     * @return The tuple count.
+     */
+    public long getTupleCount() {
+        return tupleCounter;
+    }
+
+    /**
+     * Resets the tuple counter to zero.
+     */
+    public void resetTupleCount() {
+        tupleCounter = 0;
+    }
 
     /**
      * Resets the iterator to the start.

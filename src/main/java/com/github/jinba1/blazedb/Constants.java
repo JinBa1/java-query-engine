@@ -10,7 +10,7 @@ package com.github.jinba1.blazedb;
 public class Constants {
 
     /** Controls whether query plan optimization is enabled */
-    public static final boolean useQueryOptimization = true;  // Add this line
+    public static boolean useQueryOptimization = true;
 
     /** Prefix used to identify intermediate schemas created during query processing */
     public static final String INTERMEDIATE_SCHEMA_PREFIX = "temp_";

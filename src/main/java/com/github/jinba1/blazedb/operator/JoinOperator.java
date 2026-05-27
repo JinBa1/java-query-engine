@@ -78,7 +78,7 @@ public class JoinOperator extends Operator {
 //                    ", columns: " + combined.getTuple().size());
 
             if (expression == null  || evaluator.evaluate(expression, combined)) {
-                //tupleCounter ++;
+                tupleCounter++;
                 return combined;  // pass join condition if having one
             }
         }

@@ -55,7 +55,7 @@ public class ProjectOperator extends Operator {
             projectedColumns.add(nextTuple.getAttribute(index));
         }
 
-        //tupleCounter++;
+        tupleCounter++;
         return new Tuple(projectedColumns);
     }
 
