@@ -32,10 +32,12 @@ public class ExpressionPreprocessorTest {
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/T1.csv"))) {
+            writer.write("A, B\n");
             writer.write("1, 10\n");
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/T2.csv"))) {
+            writer.write("C, D\n");
             writer.write("100, 200\n");
         }
 

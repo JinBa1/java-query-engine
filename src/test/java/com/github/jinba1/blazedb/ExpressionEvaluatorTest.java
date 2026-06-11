@@ -48,6 +48,7 @@ public class ExpressionEvaluatorTest {
 
         // Create test data file with some sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("A, B, C, D\n");
             writer.write("1, 10, 100, 1000\n");
             writer.write("2, 20, 200, 2000\n");
             writer.write("3, 30, 300, 3000\n");

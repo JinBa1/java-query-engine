@@ -39,6 +39,7 @@ public class DuplicateEliminationOperatorTest {
 
         // Create test data file with duplicate values
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("A, B, C\n");
             writer.write("1, 10, 100\n");    // Unique tuple
             writer.write("2, 20, 200\n");    // Unique tuple
             writer.write("1, 10, 100\n");    // Duplicate of first tuple
@@ -186,7 +187,7 @@ public class DuplicateEliminationOperatorTest {
         try {
             Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
-                // Intentionally left empty
+                writer.write("A, B, C\n");    // header only; no data rows
             }
         } catch (IOException e) {
             fail("Failed to create empty test file: " + e.getMessage());
@@ -208,6 +209,7 @@ public class DuplicateEliminationOperatorTest {
         try {
             Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+                writer.write("A, B, C\n");
                 writer.write("1, 10, 100\n");
                 writer.write("1, 10, 100\n");
                 writer.write("1, 10, 100\n");

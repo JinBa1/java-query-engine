@@ -38,10 +38,12 @@ public class ConditionSplitterTest {
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + OUTER_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 85, 3\n");
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + INNER_TABLE + ".csv"))) {
+            writer.write("cid, sid, grade\n");
             writer.write("10, 1, 90\n");
         }
 

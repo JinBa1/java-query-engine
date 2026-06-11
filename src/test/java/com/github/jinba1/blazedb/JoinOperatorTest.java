@@ -45,6 +45,7 @@ public class JoinOperatorTest {
 
         // Create Students table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + STUDENTS_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 20, 3\n");    // sid=1, name=25, age=20, gpa=3
             writer.write("2, 30, 22, 4\n");    // sid=2, name=30, age=22, gpa=4
             writer.write("3, 35, 19, 2\n");    // sid=3, name=35, age=19, gpa=2
@@ -53,6 +54,7 @@ public class JoinOperatorTest {
 
         // Create Courses table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + COURSES_TABLE + ".csv"))) {
+            writer.write("cid, title, credits, department\n");
             writer.write("101, 50, 3, 10\n");  // cid=101, title=50, credits=3, department=10
             writer.write("102, 55, 4, 10\n");  // cid=102, title=55, credits=4, department=10
             writer.write("103, 60, 3, 20\n");  // cid=103, title=60, credits=3, department=20
@@ -61,6 +63,7 @@ public class JoinOperatorTest {
 
         // Create Enrolled table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + ENROLLED_TABLE + ".csv"))) {
+            writer.write("sid, cid, grade\n");
             writer.write("1, 101, 85\n");      // sid=1, cid=101, grade=85
             writer.write("1, 103, 90\n");      // sid=1, cid=103, grade=90
             writer.write("2, 101, 95\n");      // sid=2, cid=101, grade=95
@@ -68,9 +71,9 @@ public class JoinOperatorTest {
             writer.write("4, 104, 75\n");      // sid=4, cid=104, grade=75
         }
 
-        // Create empty table file
+        // Create empty table file (header row required by catalog; no data rows)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + EMPTY_TABLE + ".csv"))) {
-            // Intentionally left empty
+            writer.write("id, name\n");
         }
 
         // Initialize the database catalog

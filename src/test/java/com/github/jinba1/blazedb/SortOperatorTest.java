@@ -41,6 +41,7 @@ public class SortOperatorTest {
 
         // Create test data file with varied sample data (intentionally not in sorted order)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("3, 35, 19, 2\n");     // sid=3, name=35, age=19, gpa=2
             writer.write("1, 25, 85, 3\n");     // sid=1, name=25, age=85, gpa=3
             writer.write("5, 45, 65, 3\n");     // sid=5, name=45, age=65, gpa=3
@@ -296,11 +297,11 @@ public class SortOperatorTest {
 
     @Test
     public void testSortBySecondaryColumn() {
-        // Test that secondary sort key is used only when primary keys are equal
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
-
-        // Create new test data with tied gpa values
+        // Create new test data with tied gpa values.
+        // Must be written before constructing the ScanOperator, which opens the
+        // file eagerly in its constructor.
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 30, 3\n");     // sid=1, name=25, age=30, gpa=3
             writer.write("2, 30, 20, 3\n");     // sid=2, name=30, age=20, gpa=3
             writer.write("3, 35, 40, 3\n");     // sid=3, name=35, age=40, gpa=3
@@ -309,6 +310,9 @@ public class SortOperatorTest {
         } catch (IOException e) {
             fail("Failed to write test data: " + e.getMessage());
         }
+
+        // Test that secondary sort key is used only when primary keys are equal
+        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
 
         // Sort by gpa (primary) and age (secondary)
         List<Column> sortColumns = new ArrayList<>();

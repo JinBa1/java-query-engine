@@ -57,6 +57,7 @@ public class SumOperatorTest {
 
         // Create test data file with sales data - this is the base data for most tests
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5 (revenue=50)
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10 (revenue=200)
             writer.write("3, 2, 15, 8\n");    // product_id=3, category=2, qty=15, price=8 (revenue=120)
@@ -65,21 +66,14 @@ public class SumOperatorTest {
             // Note: Changed the category for product_id=5 from 3 to 2 to fix the test expectations
         }
 
-        // Create empty table file
+        // Create empty table file (header row required by catalog; no data rows)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + EMPTY_TABLE + ".csv"))) {
-            // Intentionally left empty
+            writer.write("product_id, category, qty, price\n");
         }
 
-        // Initialize the database catalog.
-        // May throw QueryExecutionException for headerless legacy fixtures — swallowed here;
-        // tests that need a clean catalog re-initialize themselves.
+        // Initialize the database catalog
         DBCatalog.resetDBCatalog();
-        try {
-            DBCatalog.initDBCatalog(TEST_DB_DIR);
-        } catch (QueryExecutionException ignored) {
-            // Legacy fixtures (e.g. EmptySales.csv) lack header rows; tests using
-            // @TempDir + writeTable reinitialize DBCatalog themselves.
-        }
+        DBCatalog.initDBCatalog(TEST_DB_DIR);
     }
 
     @AfterEach
@@ -585,6 +579,7 @@ public class SumOperatorTest {
     public void testMultipleGroupByColumns() throws Exception {
         // Create test data with multiple attributes to group by
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5
             writer.write("1, 2, 15, 8\n");    // product_id=1, category=2, qty=15, price=8
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10
@@ -664,6 +659,7 @@ public class SumOperatorTest {
     public void testSubsetOfGroupByColumnsAsOutput() throws Exception {
         // Create test data specifically for this test with controlled category values
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5
             writer.write("1, 2, 15, 8\n");    // product_id=1, category=2, qty=15, price=8
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10

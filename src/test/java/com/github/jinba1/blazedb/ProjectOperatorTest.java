@@ -41,6 +41,7 @@ public class ProjectOperatorTest {
 
         // Create test data file with varied sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 85, 3\n");     // sid=1, name=25 (numeric stand-in), age=85, gpa=3
             writer.write("2, 30, 22, 4\n");     // sid=2, name=30, age=22, gpa=4
             writer.write("3, 35, 19, 2\n");     // sid=3, name=35, age=19, gpa=2
