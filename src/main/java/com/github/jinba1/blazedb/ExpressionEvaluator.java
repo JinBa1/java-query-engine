@@ -219,8 +219,18 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
     }
 
     /**
+     * Visits a string literal and pushes it onto the value stack.
+     * @param stringValue The string literal to evaluate
+     */
+    @Override
+    public void visit(net.sf.jsqlparser.expression.StringValue stringValue) {
+        valueStack.push(new StringValue(stringValue.getValue()));
+    }
+
+    /**
      * Visits a binary expression and evaluates it based on its specific type.
      * Handles comparison operators (=, !=, >, >=, <, <=) and multiplication.
+     * Arithmetic operators require int operands; comparisons require matching types.
      * @param expression The binary expression to evaluate
      * @throws UnsupportedOperationException If the expression type is not supported
      */
@@ -230,37 +240,35 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         expression.getRightExpression().accept(this);
 
         // reverse order for LIFO
-        Value rightV = valueStack.pop();
-        Value leftV = valueStack.pop();
-        if (!(rightV instanceof IntValue r) || !(leftV instanceof IntValue l)) {
-            throw new QueryExecutionException("Type mismatch: expected int operands, got "
-                    + leftV.typeName() + " and " + rightV.typeName());
+        Value right = valueStack.pop();
+        Value left = valueStack.pop();
+
+        if (expression instanceof Multiplication) {
+            if (!(left instanceof IntValue l) || !(right instanceof IntValue r)) {
+                throw new QueryExecutionException("Arithmetic requires int operands: cannot multiply "
+                        + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
+            }
+            valueStack.push(new IntValue(l.v() * r.v()));
+            return;
         }
-        int rightVal = r.v();
-        int leftVal = l.v();
+
+        if (left.getClass() != right.getClass()) {
+            throw new QueryExecutionException("Type mismatch: cannot compare "
+                    + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
+        }
 
         if (expression instanceof EqualsTo) {
-            boolean result = leftVal == rightVal;
-            resultStack.push(result);
+            resultStack.push(left.equals(right));
         } else if (expression instanceof NotEqualsTo) {
-            boolean result = leftVal != rightVal;
-            resultStack.push(result);
+            resultStack.push(!left.equals(right));
         } else if (expression instanceof GreaterThan) {
-            boolean result = leftVal > rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) > 0);
         } else if (expression instanceof GreaterThanEquals) {
-            boolean result = leftVal >= rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) >= 0);
         } else if (expression instanceof MinorThan) {
-            boolean result = leftVal < rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) < 0);
         } else if (expression instanceof MinorThanEquals) {
-            boolean result = leftVal <= rightVal;
-            resultStack.push(result);
-        } else if (expression instanceof Multiplication) {
-            // For multiplication, we calculate the product and push it to valueStack
-            // (not resultStack since it's not a boolean result)
-            valueStack.push(new IntValue(leftVal * rightVal));
+            resultStack.push(left.compareTo(right) <= 0);
         } else {
             throw new UnsupportedOperationException("Unsupported binary expression: " + expression.getClass().getName());
         }

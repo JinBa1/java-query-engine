@@ -6,9 +6,11 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
 import com.github.jinba1.blazedb.operator.SelectOperator;
@@ -22,6 +24,7 @@ import net.sf.jsqlparser.schema.Table;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class ExpressionEvaluatorTest {
 
@@ -301,5 +304,64 @@ public class ExpressionEvaluatorTest {
         } finally {
             scanOp.close();
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // String-type tests using a @TempDir-based typed table (id INT, name STRING)
+    // -----------------------------------------------------------------------
+
+    @TempDir
+    Path tempDb;
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
+
+    private ExpressionEvaluator typedEvaluator() throws IOException {
+        writeTable("People", "id,name", "1,alice", "2,bob");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        return new ExpressionEvaluator("People");
+    }
+
+    @Test
+    public void stringEqualityLiteral() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name = 'alice'");
+        assertTrue(evaluator.evaluate(e, alice));
+        Expression ne = CCJSqlParserUtil.parseCondExpression("People.name = 'bob'");
+        assertFalse(evaluator.evaluate(ne, alice));
+    }
+
+    @Test
+    public void stringOrderingIsLexicographic() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name < 'bob'");
+        assertTrue(evaluator.evaluate(e, alice));
+    }
+
+    @Test
+    public void crossTypeComparisonThrowsWithBothTypes() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.id = 'alice'");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> evaluator.evaluate(e, alice));
+        assertTrue(ex.getMessage().contains("int"));
+        assertTrue(ex.getMessage().contains("string"));
+    }
+
+    @Test
+    public void multiplicationOnStringThrows() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name * 2 = 4");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> evaluator.evaluate(e, alice));
+        assertTrue(ex.getMessage().contains("requires int"));
     }
 }
