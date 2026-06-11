@@ -19,6 +19,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | `QueryPlanner` | Parses SQL and builds the operator pipeline |
 | `QueryPlanOptimizer` | Selection pushdown, trivial operator removal |
 | `DBCatalog` | Schema and table metadata (singleton) |
+| `Value` | Typed tuple values (sealed interface: `IntValue`, `StringValue`) |
 | `ExpressionEvaluator` | Evaluates WHERE/HAVING conditions per tuple |
 | `ExpressionPreprocessor` | Resolves column references to indices |
 | `ConditionSplitter` | Separates join predicates from selection predicates |
@@ -39,6 +40,8 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | `DISTINCT` | ✅ Supported |
 | Nested arithmetic/comparison expressions | ✅ Supported |
 | Query optimisation (selection pushdown) | ✅ Supported |
+| Typed columns (int, string) | ✅ Supported |
+| CSV header support | ✅ Supported |
 | Indexes | ❌ Not supported |
 | Transactions | ❌ Not supported |
 | INSERT / UPDATE / DELETE | ❌ Not supported |
@@ -48,7 +51,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 ## Scope
 
-This engine supports **SQL-over-CSV query execution**: read-only queries against tables stored as CSV files. It does not support transactions, indexes, data modification (INSERT/UPDATE/DELETE), concurrency, persistence, or a full SQL dialect. All values are integers.
+This engine supports **SQL-over-CSV query execution**: read-only queries against tables stored as CSV files. It does not support transactions, indexes, data modification (INSERT/UPDATE/DELETE), concurrency, persistence, or a full SQL dialect. Values are typed int or string, inferred per column from the data. Tables are discovered from CSV files with header rows; no separate schema file.
 
 The focus is on demonstrating query planning, optimisation, and the Volcano iterator execution model.
 
@@ -78,6 +81,7 @@ java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
 **Input table** (`samples/db/data/Student.csv`):
 
 ```
+A, B, C, D
 1, 200, 50, 33
 2, 200, 200, 44
 3, 100, 105, 44
@@ -103,8 +107,9 @@ java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
 **Output** (`output.csv`):
 
 ```
-1, 200, 50, 33
-2, 200, 200, 44
+a,b,c,d
+1,200,50,33
+2,200,200,44
 ```
 
 ## Running Examples
@@ -127,20 +132,19 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (225 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (262 tests).
 
 ## Project Structure
 
 ```
-├── src/main/java/com/github/jinba1/blazedb/   # Core engine (21 files)
+├── src/main/java/com/github/jinba1/blazedb/   # Core engine (27 files)
 │   └── operator/                                # Volcano operators (8 files)
 ├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests
 ├── samples/
-│   ├── db/schema.txt                            # Table schemas
-│   ├── db/data/                                 # CSV data files
+│   ├── db/data/                                 # CSV data files (header row + data rows)
 │   ├── input/query[1-12].sql                    # Sample queries
 │   └── expected_output/query[1-12].csv          # Expected results
-├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7)
+├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7, commons-csv 1.14.1)
 ├── mvnw / mvnw.cmd                              # Maven Wrapper
 └── LICENSE
 ```
