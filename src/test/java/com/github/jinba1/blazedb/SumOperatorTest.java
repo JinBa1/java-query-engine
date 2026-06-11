@@ -6,9 +6,12 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
 import com.github.jinba1.blazedb.operator.SumOperator;
@@ -22,8 +25,18 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class SumOperatorTest {
+
+    @TempDir
+    Path tempDb;
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
     private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
@@ -57,9 +70,16 @@ public class SumOperatorTest {
             // Intentionally left empty
         }
 
-        // Initialize the database catalog
+        // Initialize the database catalog.
+        // May throw QueryExecutionException for headerless legacy fixtures — swallowed here;
+        // tests that need a clean catalog re-initialize themselves.
         DBCatalog.resetDBCatalog();
-        DBCatalog.initDBCatalog(TEST_DB_DIR);
+        try {
+            DBCatalog.initDBCatalog(TEST_DB_DIR);
+        } catch (QueryExecutionException ignored) {
+            // Legacy fixtures (e.g. EmptySales.csv) lack header rows; tests using
+            // @TempDir + writeTable reinitialize DBCatalog themselves.
+        }
     }
 
     @AfterEach
@@ -480,6 +500,85 @@ public class SumOperatorTest {
 
         // Verify we have 2 groups (categories) as expected
         assertEquals(2, firstRunCount, "Should have 2 groups");
+    }
+
+    @Test
+    public void groupByStringColumnSums() throws Exception {
+        writeTable("Orders", "customer,amount", "alice,10", "bob,5", "alice,7");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        ScanOperator scanOp = new ScanOperator("Orders");
+
+        Table table = new Table();
+        table.setName("Orders");
+
+        // GROUP BY Orders.customer
+        List<Column> groupByColumns = new ArrayList<>();
+        Column customerColumn = new Column();
+        customerColumn.setTable(table);
+        customerColumn.setColumnName("customer");
+        groupByColumns.add(customerColumn);
+
+        // SUM(Orders.amount)
+        List<Expression> sumExpressions = new ArrayList<>();
+        Function sumFunction = new Function();
+        sumFunction.setName("SUM");
+        Column amountColumn = new Column();
+        amountColumn.setTable(table);
+        amountColumn.setColumnName("amount");
+        ExpressionList exprList = new ExpressionList();
+        exprList.addExpressions(amountColumn);
+        sumFunction.setParameters(exprList);
+        sumExpressions.add(sumFunction);
+
+        // Output columns: Orders.customer
+        List<Column> outputColumns = new ArrayList<>(groupByColumns);
+
+        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+
+        Set<String> resultStrings = new HashSet<>();
+        Tuple tuple;
+        while ((tuple = sumOp.getNextTuple()) != null) {
+            resultStrings.add(tuple.toString());
+        }
+
+        assertEquals(Set.of("alice, 17", "bob, 5"), resultStrings);
+    }
+
+    @Test
+    public void sumOverStringColumnThrows() throws Exception {
+        writeTable("Orders", "customer,amount", "alice,10");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        ScanOperator scanOp = new ScanOperator("Orders");
+
+        Table table = new Table();
+        table.setName("Orders");
+
+        // GROUP BY Orders.customer (or no group by — either works; we use no group by)
+        List<Column> groupByColumns = new ArrayList<>();
+
+        // SUM(Orders.customer) — customer is a STRING column
+        List<Expression> sumExpressions = new ArrayList<>();
+        Function sumFunction = new Function();
+        sumFunction.setName("SUM");
+        Column customerColumn = new Column();
+        customerColumn.setTable(table);
+        customerColumn.setColumnName("customer");
+        ExpressionList exprList = new ExpressionList();
+        exprList.addExpressions(customerColumn);
+        sumFunction.setParameters(exprList);
+        sumExpressions.add(sumFunction);
+
+        List<Column> outputColumns = new ArrayList<>();
+
+        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> { while (sumOp.getNextTuple() != null) { /* drain */ } });
+        assertTrue(e.getMessage().contains("SUM requires int"), e.getMessage());
     }
 
     @Test

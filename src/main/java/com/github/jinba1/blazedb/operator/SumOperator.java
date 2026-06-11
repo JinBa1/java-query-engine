@@ -183,9 +183,14 @@ public class SumOperator extends Operator {
                     if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
                         Expression innerExpr = (Expression) function.getParameters().get(0);
                         // Evaluate the expression for this tuple
-                        int value = ((IntValue) evaluator.evaluateValue(innerExpr, tuple)).v();
+                        Value value = evaluator.evaluateValue(innerExpr, tuple);
+                        if (!(value instanceof IntValue iv)) {
+                            throw new QueryExecutionException(
+                                    "SUM requires int values; got " + value.typeName()
+                                            + " value '" + value + "' from expression '" + innerExpr + "'");
+                        }
                         // Add to the current aggregate value
-                        aggregates.set(i, aggregates.get(i) + value);
+                        aggregates.set(i, aggregates.get(i) + iv.v());
                     }
                 }
             }
