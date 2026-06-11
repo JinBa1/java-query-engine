@@ -6,3 +6,7 @@ target/
 src/test/resources/test_integration_output/
 src/test/resources/test_sample_output/
 src/test/resources/test_integration_queries/
+
+# local working files
+dev/
+CLAUDE.md
