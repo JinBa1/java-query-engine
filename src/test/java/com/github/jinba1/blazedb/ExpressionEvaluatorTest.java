@@ -6,9 +6,10 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
 import com.github.jinba1.blazedb.operator.SelectOperator;
@@ -22,11 +23,11 @@ import net.sf.jsqlparser.schema.Table;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class ExpressionEvaluatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "TestTable";
 
@@ -38,13 +39,9 @@ public class ExpressionEvaluatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " A B C D\n");
-        }
-
         // Create test data file with some sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("A, B, C, D\n");
             writer.write("1, 10, 100, 1000\n");
             writer.write("2, 20, 200, 2000\n");
             writer.write("3, 30, 300, 3000\n");
@@ -58,14 +55,13 @@ public class ExpressionEvaluatorTest {
         evaluator = new ExpressionEvaluator(TEST_TABLE);
 
         // Create a test tuple for evaluations
-        testTuple = new Tuple(new ArrayList<>(Arrays.asList(1, 10, 100, 1000)));
+        testTuple = new Tuple(TestTuples.ints(1, 10, 100, 1000));
     }
 
     @AfterEach
     public void tearDown() throws IOException {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -230,11 +226,11 @@ public class ExpressionEvaluatorTest {
             // Should return tuples with B > 15 (the 2nd and 3rd tuples)
             Tuple tuple1 = selectOp.getNextTuple();
             assertNotNull(tuple1, "Should return first matching tuple");
-            assertEquals(Integer.valueOf(20), tuple1.getAttribute(1), "Should be 2nd tuple with B=20");
+            assertEquals(new IntValue(20), tuple1.getAttribute(1), "Should be 2nd tuple with B=20");
 
             Tuple tuple2 = selectOp.getNextTuple();
             assertNotNull(tuple2, "Should return second matching tuple");
-            assertEquals(Integer.valueOf(30), tuple2.getAttribute(1), "Should be 3rd tuple with B=30");
+            assertEquals(new IntValue(30), tuple2.getAttribute(1), "Should be 3rd tuple with B=30");
 
             Tuple tuple3 = selectOp.getNextTuple();
             assertNull(tuple3, "Should have no more matching tuples");
@@ -287,11 +283,11 @@ public class ExpressionEvaluatorTest {
             // Should return tuples that match the complex condition (1st and 2nd tuples)
             Tuple tuple1 = selectOp.getNextTuple();
             assertNotNull(tuple1, "Should return first matching tuple");
-            assertEquals(Integer.valueOf(1), tuple1.getAttribute(0), "Should be 1st tuple with A=1");
+            assertEquals(new IntValue(1), tuple1.getAttribute(0), "Should be 1st tuple with A=1");
 
             Tuple tuple2 = selectOp.getNextTuple();
             assertNotNull(tuple2, "Should return second matching tuple");
-            assertEquals(Integer.valueOf(2), tuple2.getAttribute(0), "Should be 2nd tuple with A=2");
+            assertEquals(new IntValue(2), tuple2.getAttribute(0), "Should be 2nd tuple with A=2");
 
             Tuple tuple3 = selectOp.getNextTuple();
             assertNull(tuple3, "Should have no more matching tuples");
@@ -301,5 +297,64 @@ public class ExpressionEvaluatorTest {
         } finally {
             scanOp.close();
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // String-type tests using a @TempDir-based typed table (id INT, name STRING)
+    // -----------------------------------------------------------------------
+
+    @TempDir
+    Path tempDb;
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
+
+    private ExpressionEvaluator typedEvaluator() throws IOException {
+        writeTable("People", "id,name", "1,alice", "2,bob");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        return new ExpressionEvaluator("People");
+    }
+
+    @Test
+    public void stringEqualityLiteral() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name = 'alice'");
+        assertTrue(evaluator.evaluate(e, alice));
+        Expression ne = CCJSqlParserUtil.parseCondExpression("People.name = 'bob'");
+        assertFalse(evaluator.evaluate(ne, alice));
+    }
+
+    @Test
+    public void stringOrderingIsLexicographic() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name < 'bob'");
+        assertTrue(evaluator.evaluate(e, alice));
+    }
+
+    @Test
+    public void crossTypeComparisonThrowsWithBothTypes() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.id = 'alice'");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> evaluator.evaluate(e, alice));
+        assertTrue(ex.getMessage().contains("int"));
+        assertTrue(ex.getMessage().contains("string"));
+    }
+
+    @Test
+    public void multiplicationOnStringThrows() throws Exception {
+        ExpressionEvaluator evaluator = typedEvaluator();
+        Tuple alice = new Tuple(List.of(new IntValue(1), new StringValue("alice")));
+        Expression e = CCJSqlParserUtil.parseCondExpression("People.name * 2 = 4");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> evaluator.evaluate(e, alice));
+        assertTrue(ex.getMessage().contains("requires int"));
     }
 }

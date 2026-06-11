@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
 public class JoinOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String STUDENTS_TABLE = "Students";
     private static final String COURSES_TABLE = "Courses";
@@ -35,16 +34,9 @@ public class JoinOperatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(STUDENTS_TABLE + " sid name age gpa\n");
-            writer.write(COURSES_TABLE + " cid title credits department\n");
-            writer.write(ENROLLED_TABLE + " sid cid grade\n");
-            writer.write(EMPTY_TABLE + " id name\n");
-        }
-
         // Create Students table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + STUDENTS_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 20, 3\n");    // sid=1, name=25, age=20, gpa=3
             writer.write("2, 30, 22, 4\n");    // sid=2, name=30, age=22, gpa=4
             writer.write("3, 35, 19, 2\n");    // sid=3, name=35, age=19, gpa=2
@@ -53,6 +45,7 @@ public class JoinOperatorTest {
 
         // Create Courses table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + COURSES_TABLE + ".csv"))) {
+            writer.write("cid, title, credits, department\n");
             writer.write("101, 50, 3, 10\n");  // cid=101, title=50, credits=3, department=10
             writer.write("102, 55, 4, 10\n");  // cid=102, title=55, credits=4, department=10
             writer.write("103, 60, 3, 20\n");  // cid=103, title=60, credits=3, department=20
@@ -61,6 +54,7 @@ public class JoinOperatorTest {
 
         // Create Enrolled table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + ENROLLED_TABLE + ".csv"))) {
+            writer.write("sid, cid, grade\n");
             writer.write("1, 101, 85\n");      // sid=1, cid=101, grade=85
             writer.write("1, 103, 90\n");      // sid=1, cid=103, grade=90
             writer.write("2, 101, 95\n");      // sid=2, cid=101, grade=95
@@ -68,9 +62,9 @@ public class JoinOperatorTest {
             writer.write("4, 104, 75\n");      // sid=4, cid=104, grade=75
         }
 
-        // Create empty table file
+        // Create empty table file (header row required by catalog; no data rows)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + EMPTY_TABLE + ".csv"))) {
-            // Intentionally left empty
+            writer.write("id, name\n");
         }
 
         // Initialize the database catalog
@@ -85,7 +79,6 @@ public class JoinOperatorTest {
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + COURSES_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + ENROLLED_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + EMPTY_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -145,8 +138,8 @@ public class JoinOperatorTest {
         // Verify each tuple meets all conditions
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(0), t.getAttribute(4), "Student sid should match Enrolled sid");
-            assertTrue(t.getAttribute(3) > 2, "Student gpa should be > 2");
-            assertTrue(t.getAttribute(6) > 80, "Enrolled grade should be > 80");
+            assertTrue(((IntValue) t.getAttribute(3)).v() > 2, "Student gpa should be > 2");
+            assertTrue(((IntValue) t.getAttribute(6)).v() > 80, "Enrolled grade should be > 80");
         }
     }
 
@@ -222,7 +215,7 @@ public class JoinOperatorTest {
 
         // Verify join condition for all tuples
         for (Tuple t : joinedTuples) {
-            assertTrue(t.getAttribute(3) > t.getAttribute(6), "Student gpa should be > Course credits");
+            assertTrue(((IntValue) t.getAttribute(3)).v() > ((IntValue) t.getAttribute(6)).v(), "Student gpa should be > Course credits");
         }
     }
 
@@ -309,7 +302,7 @@ public class JoinOperatorTest {
         // Verify conditions are met for all tuples
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(0), t.getAttribute(4), "Student sid should match Enrolled sid");
-            assertTrue(t.getAttribute(3) >= 3, "Student gpa should be >= 3");
+            assertTrue(((IntValue) t.getAttribute(3)).v() >= 3, "Student gpa should be >= 3");
         }
     }
 
@@ -334,7 +327,7 @@ public class JoinOperatorTest {
         // Verify each tuple meets both join conditions
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(2), t.getAttribute(7), "Student age should match Course department");
-            assertTrue(t.getAttribute(3) < t.getAttribute(6), "Student gpa should be < Course credits");
+            assertTrue(((IntValue) t.getAttribute(3)).v() < ((IntValue) t.getAttribute(6)).v(), "Student gpa should be < Course credits");
         }
     }
 

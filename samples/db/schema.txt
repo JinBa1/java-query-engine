@@ -1,3 +1,0 @@
-Student A B C D
-Course E F G
-Enrolled A E H

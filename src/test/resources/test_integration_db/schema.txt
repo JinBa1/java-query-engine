@@ -1,5 +1,0 @@
-Student A B C D
-Course E F G H
-Enrolled I J K
-Department L M N
-Faculty O P Q

@@ -18,24 +18,19 @@ import org.junit.jupiter.api.Test;
 public class ExpressionPreprocessorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb_ep";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
 
     @BeforeEach
     public void setUp() throws IOException {
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Two tables: T1(A, B), T2(C, D)
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write("T1 A B\n");
-            writer.write("T2 C D\n");
-        }
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/T1.csv"))) {
+            writer.write("A, B\n");
             writer.write("1, 10\n");
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/T2.csv"))) {
+            writer.write("C, D\n");
             writer.write("100, 200\n");
         }
 
@@ -47,7 +42,6 @@ public class ExpressionPreprocessorTest {
     public void tearDown() throws IOException {
         Files.deleteIfExists(Paths.get(DATA_DIR + "/T1.csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/T2.csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }

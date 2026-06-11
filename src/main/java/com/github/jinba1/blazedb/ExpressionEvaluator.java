@@ -29,7 +29,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
 
     private Tuple currentTuple;
     private final Stack<Boolean> resultStack;
-    private final Stack<Integer> valueStack;
+    private final Stack<Value> valueStack;
 
     private final String schemaId;
 
@@ -78,7 +78,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
      * @return The numeric result of evaluating the expression
      * @throws RuntimeException If the expression evaluation does not produce a value
      */
-    public Integer evaluateValue(Expression expression, Tuple tuple) {
+    public Value evaluateValue(Expression expression, Tuple tuple) {
         // Note: logical expressions should not be passed to this method; guard if needed
         this.currentTuple = tuple;
         this.resultStack.clear();
@@ -215,12 +215,22 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
      */
     @Override
     public void visit(LongValue longValue) {
-        valueStack.push(Long.valueOf(longValue.getValue()).intValue());
+        valueStack.push(new IntValue((int) longValue.getValue()));
+    }
+
+    /**
+     * Visits a string literal and pushes it onto the value stack.
+     * @param stringValue The string literal to evaluate
+     */
+    @Override
+    public void visit(net.sf.jsqlparser.expression.StringValue stringValue) {
+        valueStack.push(new StringValue(stringValue.getValue()));
     }
 
     /**
      * Visits a binary expression and evaluates it based on its specific type.
      * Handles comparison operators (=, !=, >, >=, <, <=) and multiplication.
+     * Arithmetic operators require int operands; comparisons require matching types.
      * @param expression The binary expression to evaluate
      * @throws UnsupportedOperationException If the expression type is not supported
      */
@@ -230,31 +240,35 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         expression.getRightExpression().accept(this);
 
         // reverse order for LIFO
-        int rightVal = valueStack.pop();
-        int leftVal = valueStack.pop();
+        Value right = valueStack.pop();
+        Value left = valueStack.pop();
+
+        if (expression instanceof Multiplication) {
+            if (!(left instanceof IntValue l) || !(right instanceof IntValue r)) {
+                throw new QueryExecutionException("Arithmetic requires int operands: cannot multiply "
+                        + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
+            }
+            valueStack.push(new IntValue(l.v() * r.v()));
+            return;
+        }
+
+        if (left.getClass() != right.getClass()) {
+            throw new QueryExecutionException("Type mismatch: cannot compare "
+                    + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
+        }
 
         if (expression instanceof EqualsTo) {
-            boolean result = leftVal == rightVal;
-            resultStack.push(result);
+            resultStack.push(left.equals(right));
         } else if (expression instanceof NotEqualsTo) {
-            boolean result = leftVal != rightVal;
-            resultStack.push(result);
+            resultStack.push(!left.equals(right));
         } else if (expression instanceof GreaterThan) {
-            boolean result = leftVal > rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) > 0);
         } else if (expression instanceof GreaterThanEquals) {
-            boolean result = leftVal >= rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) >= 0);
         } else if (expression instanceof MinorThan) {
-            boolean result = leftVal < rightVal;
-            resultStack.push(result);
+            resultStack.push(left.compareTo(right) < 0);
         } else if (expression instanceof MinorThanEquals) {
-            boolean result = leftVal <= rightVal;
-            resultStack.push(result);
-        } else if (expression instanceof Multiplication) {
-            // For multiplication, we calculate the product and push it to valueStack
-            // (not resultStack since it's not a boolean result)
-            valueStack.push(leftVal * rightVal);
+            resultStack.push(left.compareTo(right) <= 0);
         } else {
             throw new UnsupportedOperationException("Unsupported binary expression: " + expression.getClass().getName());
         }

@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.Test;
 public class SortOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
@@ -34,13 +32,9 @@ public class SortOperatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " sid name age gpa\n");
-        }
-
         // Create test data file with varied sample data (intentionally not in sorted order)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("3, 35, 19, 2\n");     // sid=3, name=35, age=19, gpa=2
             writer.write("1, 25, 85, 3\n");     // sid=1, name=25, age=85, gpa=3
             writer.write("5, 45, 65, 3\n");     // sid=5, name=45, age=65, gpa=3
@@ -57,7 +51,6 @@ public class SortOperatorTest {
     public void tearDown() throws IOException {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -79,8 +72,8 @@ public class SortOperatorTest {
         SortOperator sortOp = new SortOperator(scanOp, sortColumns);
 
         // Get all tuples and verify they are in the expected order
-        List<Integer> expectedSids = Arrays.asList(1, 2, 3, 4, 5);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(1, 2, 3, 4, 5);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = sortOp.getNextTuple()) != null) {
@@ -133,16 +126,16 @@ public class SortOperatorTest {
         // For equal gpa (4), sid 4 (age 21) should come before sid 2 (age 22)
 
         // First tuple should be sid 3 (lowest gpa)
-        assertEquals(Integer.valueOf(3), sortedTuples.get(0).getAttribute(0), "First tuple should have sid=3 (lowest gpa)");
+        assertEquals(new IntValue(3), sortedTuples.get(0).getAttribute(0), "First tuple should have sid=3 (lowest gpa)");
 
         // Check the order of tuples with gpa=3
         boolean correctOrderForGpa3 = false;
         for (int i = 1; i < sortedTuples.size() - 2; i++) {
-            if (sortedTuples.get(i).getAttribute(3) == 3 &&
-                    sortedTuples.get(i+1).getAttribute(3) == 3) {
+            if (((IntValue) sortedTuples.get(i).getAttribute(3)).v() == 3 &&
+                    ((IntValue) sortedTuples.get(i+1).getAttribute(3)).v() == 3) {
 
-                int age1 = sortedTuples.get(i).getAttribute(2);
-                int age2 = sortedTuples.get(i+1).getAttribute(2);
+                int age1 = ((IntValue) sortedTuples.get(i).getAttribute(2)).v();
+                int age2 = ((IntValue) sortedTuples.get(i+1).getAttribute(2)).v();
                 if (age1 < age2) {
                     correctOrderForGpa3 = true;
                     break;
@@ -155,11 +148,11 @@ public class SortOperatorTest {
         // Check the order of tuples with gpa=4
         boolean correctOrderForGpa4 = false;
         for (int i = 3; i < sortedTuples.size() - 1; i++) {
-            if (sortedTuples.get(i).getAttribute(3) == 4 &&
-                    sortedTuples.get(i+1).getAttribute(3) == 4) {
+            if (((IntValue) sortedTuples.get(i).getAttribute(3)).v() == 4 &&
+                    ((IntValue) sortedTuples.get(i+1).getAttribute(3)).v() == 4) {
 
-                int age1 = sortedTuples.get(i).getAttribute(2);
-                int age2 = sortedTuples.get(i+1).getAttribute(2);
+                int age1 = ((IntValue) sortedTuples.get(i).getAttribute(2)).v();
+                int age2 = ((IntValue) sortedTuples.get(i+1).getAttribute(2)).v();
                 if (age1 < age2) {
                     correctOrderForGpa4 = true;
                     break;
@@ -194,8 +187,8 @@ public class SortOperatorTest {
             SortOperator sortOp = new SortOperator(selectOp, sortColumns);
 
             // Expected sids after filtering and sorting: 1, 2, 4, 5
-            List<Integer> expectedSids = Arrays.asList(1, 2, 4, 5);
-            List<Integer> actualSids = new ArrayList<>();
+            List<Value> expectedSids = TestTuples.ints(1, 2, 4, 5);
+            List<Value> actualSids = new ArrayList<>();
 
             Tuple tuple;
             while ((tuple = sortOp.getNextTuple()) != null) {
@@ -296,11 +289,11 @@ public class SortOperatorTest {
 
     @Test
     public void testSortBySecondaryColumn() {
-        // Test that secondary sort key is used only when primary keys are equal
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
-
-        // Create new test data with tied gpa values
+        // Create new test data with tied gpa values.
+        // Must be written before constructing the ScanOperator, which opens the
+        // file eagerly in its constructor.
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 30, 3\n");     // sid=1, name=25, age=30, gpa=3
             writer.write("2, 30, 20, 3\n");     // sid=2, name=30, age=20, gpa=3
             writer.write("3, 35, 40, 3\n");     // sid=3, name=35, age=40, gpa=3
@@ -309,6 +302,9 @@ public class SortOperatorTest {
         } catch (IOException e) {
             fail("Failed to write test data: " + e.getMessage());
         }
+
+        // Test that secondary sort key is used only when primary keys are equal
+        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
 
         // Sort by gpa (primary) and age (secondary)
         List<Column> sortColumns = new ArrayList<>();
@@ -328,8 +324,8 @@ public class SortOperatorTest {
         SortOperator sortOp = new SortOperator(scanOp, sortColumns);
 
         // Expected order by age: 4, 2, 1, 3, 5 (all have same gpa)
-        List<Integer> expectedSids = Arrays.asList(4, 2, 1, 3, 5);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(4, 2, 1, 3, 5);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = sortOp.getNextTuple()) != null) {
@@ -362,21 +358,21 @@ public class SortOperatorTest {
         SortOperator sortOp = new SortOperator(scanOp, sortColumns);
 
         // Get only first 3 tuples
-        List<Integer> partialSids = new ArrayList<>();
+        List<Value> partialSids = new ArrayList<>();
         Tuple tuple;
         for (int i = 0; i < 3 && (tuple = sortOp.getNextTuple()) != null; i++) {
             partialSids.add(tuple.getAttribute(0));
         }
 
         assertEquals(3, partialSids.size(), "Should have retrieved 3 tuples");
-        assertEquals(Integer.valueOf(1), partialSids.get(0), "First tuple should have sid=1");
-        assertEquals(Integer.valueOf(2), partialSids.get(1), "Second tuple should have sid=2");
-        assertEquals(Integer.valueOf(3), partialSids.get(2), "Third tuple should have sid=3");
+        assertEquals(new IntValue(1), partialSids.get(0), "First tuple should have sid=1");
+        assertEquals(new IntValue(2), partialSids.get(1), "Second tuple should have sid=2");
+        assertEquals(new IntValue(3), partialSids.get(2), "Third tuple should have sid=3");
 
         // Reset and get all tuples
         sortOp.reset();
 
-        List<Integer> allSids = new ArrayList<>();
+        List<Value> allSids = new ArrayList<>();
         while ((tuple = sortOp.getNextTuple()) != null) {
             allSids.add(tuple.getAttribute(0));
         }
@@ -402,7 +398,7 @@ public class SortOperatorTest {
 
         SortOperator sortOp = new SortOperator(scanOp, sortColumns);
 
-        List<Integer> sortedSids = new ArrayList<>();
+        List<Value> sortedSids = new ArrayList<>();
         Tuple tuple;
         while ((tuple = sortOp.getNextTuple()) != null) {
             sortedSids.add(tuple.getAttribute(0));
@@ -410,7 +406,7 @@ public class SortOperatorTest {
 
         // Check that values are in ascending order
         for (int i = 0; i < sortedSids.size() - 1; i++) {
-            assertTrue(sortedSids.get(i) < sortedSids.get(i + 1), "Tuples should be sorted in ascending order");
+            assertTrue(((IntValue) sortedSids.get(i)).v() < ((IntValue) sortedSids.get(i + 1)).v(), "Tuples should be sorted in ascending order");
         }
 
         scanOp.close();

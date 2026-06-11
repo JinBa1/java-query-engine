@@ -6,9 +6,12 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
 import com.github.jinba1.blazedb.operator.SumOperator;
@@ -22,11 +25,20 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class SumOperatorTest {
 
+    @TempDir
+    Path tempDb;
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
+
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String SALES_TABLE = "Sales";
     private static final String EMPTY_TABLE = "EmptySales";
@@ -36,14 +48,9 @@ public class SumOperatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(SALES_TABLE + " product_id category qty price\n");
-            writer.write(EMPTY_TABLE + " product_id category qty price\n");
-        }
-
         // Create test data file with sales data - this is the base data for most tests
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5 (revenue=50)
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10 (revenue=200)
             writer.write("3, 2, 15, 8\n");    // product_id=3, category=2, qty=15, price=8 (revenue=120)
@@ -52,9 +59,9 @@ public class SumOperatorTest {
             // Note: Changed the category for product_id=5 from 3 to 2 to fix the test expectations
         }
 
-        // Create empty table file
+        // Create empty table file (header row required by catalog; no data rows)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + EMPTY_TABLE + ".csv"))) {
-            // Intentionally left empty
+            writer.write("product_id, category, qty, price\n");
         }
 
         // Initialize the database catalog
@@ -67,7 +74,6 @@ public class SumOperatorTest {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + SALES_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + EMPTY_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -118,8 +124,8 @@ public class SumOperatorTest {
 
         // Verify the sum of quantities for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int sumQty = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -194,9 +200,9 @@ public class SumOperatorTest {
 
         // Verify the sums for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int sumQty = t.getAttribute(1);
-            int sumPrice = t.getAttribute(2);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
+            int sumPrice = ((IntValue) t.getAttribute(2)).v();
 
             switch (category) {
                 case 1:
@@ -268,8 +274,8 @@ public class SumOperatorTest {
 
         // Verify the total revenue for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int totalRevenue = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int totalRevenue = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -329,8 +335,8 @@ public class SumOperatorTest {
 
         // Verify the count for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int count = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int count = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -385,7 +391,7 @@ public class SumOperatorTest {
         assertEquals(1, tuple.getTuple().size(), "Result tuple should have one attribute");
 
         // Sum of all qty values: 10 + 20 + 15 + 5 + 30 = 80
-        assertEquals(80, tuple.getAttribute(0).intValue(), "Total sum(qty) should be 80");
+        assertEquals(80, ((IntValue) tuple.getAttribute(0)).v(), "Total sum(qty) should be 80");
 
         // No more results
         assertNull(sumOp.getNextTuple(), "Should have no more result tuples");
@@ -483,9 +489,89 @@ public class SumOperatorTest {
     }
 
     @Test
+    public void groupByStringColumnSums() throws Exception {
+        writeTable("Orders", "customer,amount", "alice,10", "bob,5", "alice,7");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        ScanOperator scanOp = new ScanOperator("Orders");
+
+        Table table = new Table();
+        table.setName("Orders");
+
+        // GROUP BY Orders.customer
+        List<Column> groupByColumns = new ArrayList<>();
+        Column customerColumn = new Column();
+        customerColumn.setTable(table);
+        customerColumn.setColumnName("customer");
+        groupByColumns.add(customerColumn);
+
+        // SUM(Orders.amount)
+        List<Expression> sumExpressions = new ArrayList<>();
+        Function sumFunction = new Function();
+        sumFunction.setName("SUM");
+        Column amountColumn = new Column();
+        amountColumn.setTable(table);
+        amountColumn.setColumnName("amount");
+        ExpressionList exprList = new ExpressionList();
+        exprList.addExpressions(amountColumn);
+        sumFunction.setParameters(exprList);
+        sumExpressions.add(sumFunction);
+
+        // Output columns: Orders.customer
+        List<Column> outputColumns = new ArrayList<>(groupByColumns);
+
+        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+
+        Set<String> resultStrings = new HashSet<>();
+        Tuple tuple;
+        while ((tuple = sumOp.getNextTuple()) != null) {
+            resultStrings.add(tuple.toString());
+        }
+
+        assertEquals(Set.of("alice, 17", "bob, 5"), resultStrings);
+    }
+
+    @Test
+    public void sumOverStringColumnThrows() throws Exception {
+        writeTable("Orders", "customer,amount", "alice,10");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        ScanOperator scanOp = new ScanOperator("Orders");
+
+        Table table = new Table();
+        table.setName("Orders");
+
+        // GROUP BY Orders.customer (or no group by — either works; we use no group by)
+        List<Column> groupByColumns = new ArrayList<>();
+
+        // SUM(Orders.customer) — customer is a STRING column
+        List<Expression> sumExpressions = new ArrayList<>();
+        Function sumFunction = new Function();
+        sumFunction.setName("SUM");
+        Column customerColumn = new Column();
+        customerColumn.setTable(table);
+        customerColumn.setColumnName("customer");
+        ExpressionList exprList = new ExpressionList();
+        exprList.addExpressions(customerColumn);
+        sumFunction.setParameters(exprList);
+        sumExpressions.add(sumFunction);
+
+        List<Column> outputColumns = new ArrayList<>();
+
+        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> { while (sumOp.getNextTuple() != null) { /* drain */ } });
+        assertTrue(e.getMessage().contains("SUM requires int"), e.getMessage());
+    }
+
+    @Test
     public void testMultipleGroupByColumns() throws Exception {
         // Create test data with multiple attributes to group by
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5
             writer.write("1, 2, 15, 8\n");    // product_id=1, category=2, qty=15, price=8
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10
@@ -541,9 +627,9 @@ public class SumOperatorTest {
 
         // Verify the sums for each group
         for (Tuple t : resultTuples) {
-            int productId = t.getAttribute(0);
-            int category = t.getAttribute(1);
-            int sumQty = t.getAttribute(2);
+            int productId = ((IntValue) t.getAttribute(0)).v();
+            int category = ((IntValue) t.getAttribute(1)).v();
+            int sumQty = ((IntValue) t.getAttribute(2)).v();
 
             if (productId == 1 && category == 1) {
                 assertEquals(10, sumQty, "Product 1, Category 1 should have sum(qty)=10");
@@ -565,6 +651,7 @@ public class SumOperatorTest {
     public void testSubsetOfGroupByColumnsAsOutput() throws Exception {
         // Create test data specifically for this test with controlled category values
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
+            writer.write("product_id, category, qty, price\n");
             writer.write("1, 1, 10, 5\n");    // product_id=1, category=1, qty=10, price=5
             writer.write("1, 2, 15, 8\n");    // product_id=1, category=2, qty=15, price=8
             writer.write("2, 1, 20, 10\n");   // product_id=2, category=1, qty=20, price=10
@@ -624,11 +711,11 @@ public class SumOperatorTest {
             assertEquals(2, t.getTuple().size(), "Result tuple should have 2 attributes");
 
             // First attribute should be category (1 or 2)
-            int category = t.getAttribute(0);
+            int category = ((IntValue) t.getAttribute(0)).v();
             assertTrue(category == 1 || category == 2, "Category should be 1 or 2");
 
             // Second attribute should be sum(qty) for that specific product_id + category group
-            int sumQty = t.getAttribute(1);
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
             assertTrue(sumQty == 10 || sumQty == 15 || sumQty == 20 || sumQty == 5 || sumQty == 30, "Sum(qty) should be one of the expected values");
         }
     }

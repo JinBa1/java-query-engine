@@ -12,30 +12,30 @@ import java.util.Objects;
 public class Tuple {
 
     // Attribute values in a row
-    private final List<Integer> attributes;
+    private final List<Value> attributes;
 
     /**
      * Construct a tuple consisting a list of ordered attributes.
-     * @param attributes A list of integer values representing the attribute values.
+     * @param attributes A list of typed values representing the attribute values.
      */
-    public Tuple(List<Integer> attributes) {
+    public Tuple(List<Value> attributes) {
         this.attributes = attributes;
     }
 
     /**
      * Get the list of attributes.
-     * @return An ordered list of integer attributes.
+     * @return An ordered list of typed attributes.
      */
-    public List<Integer> getTuple() {
+    public List<Value> getTuple() {
         return attributes;
     }
 
     /**
      * Get a single attribute.
      * @param i The zero-based index of the attribute to retrieve.
-     * @return The integer value of the singe attribute.
+     * @return The typed value of the single attribute.
      */
-    public Integer getAttribute(int i) {
+    public Value getAttribute(int i) {
         return attributes.get(i);
     }
 

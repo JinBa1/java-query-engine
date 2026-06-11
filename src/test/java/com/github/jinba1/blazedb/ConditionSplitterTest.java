@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 public class ConditionSplitterTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb_splitter";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
 
     private static final String OUTER_TABLE = "Student";
@@ -32,16 +31,13 @@ public class ConditionSplitterTest {
     public void setUp() throws IOException {
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(OUTER_TABLE + " sid name age gpa\n");
-            writer.write(INNER_TABLE + " cid sid grade\n");
-        }
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + OUTER_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 85, 3\n");
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + INNER_TABLE + ".csv"))) {
+            writer.write("cid, sid, grade\n");
             writer.write("10, 1, 90\n");
         }
 
@@ -80,7 +76,6 @@ public class ConditionSplitterTest {
     public void tearDown() throws IOException {
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + OUTER_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + INNER_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }

@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import com.github.jinba1.blazedb.operator.DuplicateEliminationOperator;
@@ -23,7 +22,6 @@ import org.junit.jupiter.api.Test;
 public class DuplicateEliminationOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "TestTable";
 
@@ -32,13 +30,9 @@ public class DuplicateEliminationOperatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " A B C\n");
-        }
-
         // Create test data file with duplicate values
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("A, B, C\n");
             writer.write("1, 10, 100\n");    // Unique tuple
             writer.write("2, 20, 200\n");    // Unique tuple
             writer.write("1, 10, 100\n");    // Duplicate of first tuple
@@ -57,7 +51,6 @@ public class DuplicateEliminationOperatorTest {
     public void tearDown() throws IOException {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -81,9 +74,9 @@ public class DuplicateEliminationOperatorTest {
         assertEquals(4, distinctTuples.size(), "Should return 4 distinct tuples");
 
         // Verify the distinct tuples have the expected values
-        List<Integer> expectedFirstValues = Arrays.asList(1, 2, 3, 4);
+        List<Value> expectedFirstValues = TestTuples.ints(1, 2, 3, 4);
         for (Tuple t : distinctTuples) {
-            Integer firstValue = t.getAttribute(0);
+            Value firstValue = t.getAttribute(0);
             assertTrue(expectedFirstValues.contains(firstValue), "Distinct tuples should contain value " + firstValue);
         }
     }
@@ -123,9 +116,9 @@ public class DuplicateEliminationOperatorTest {
         }
 
         // Verify the distinct values of A
-        List<Integer> expectedValues = new ArrayList<>(Arrays.asList(1, 2, 3, 4));
+        List<Value> expectedValues = new ArrayList<>(TestTuples.ints(1, 2, 3, 4));
         for (Tuple t : distinctTuples) {
-            Integer value = t.getAttribute(0);
+            Value value = t.getAttribute(0);
             assertTrue(expectedValues.contains(value), "Distinct values should include " + value);
 
             // Remove the value to ensure no duplicates in our results
@@ -186,7 +179,7 @@ public class DuplicateEliminationOperatorTest {
         try {
             Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
-                // Intentionally left empty
+                writer.write("A, B, C\n");    // header only; no data rows
             }
         } catch (IOException e) {
             fail("Failed to create empty test file: " + e.getMessage());
@@ -208,6 +201,7 @@ public class DuplicateEliminationOperatorTest {
         try {
             Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+                writer.write("A, B, C\n");
                 writer.write("1, 10, 100\n");
                 writer.write("1, 10, 100\n");
                 writer.write("1, 10, 100\n");

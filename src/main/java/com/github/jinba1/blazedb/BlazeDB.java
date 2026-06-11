@@ -1,6 +1,11 @@
 package com.github.jinba1.blazedb;
 
 import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 
 import com.github.jinba1.blazedb.operator.Operator;
 
@@ -34,8 +39,6 @@ public class BlazeDB {
 	 */
 	public static void execute(Operator root, String outputFile) {
 		try {
-
-			// Ensure the output directory exists
 			File outputFileObj = new File(outputFile);
 			File parentDir = outputFileObj.getParentFile();
 			if (parentDir != null && !parentDir.exists()) {
@@ -45,18 +48,19 @@ public class BlazeDB {
 				}
 			}
 
-			// Create a BufferedWriter
-			BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
-
-			// Iterate over the tuples produced by root
-			Tuple tuple = root.getNextTuple();
-			while (tuple != null) {
-				writer.write(tuple.toString());
-				writer.newLine();
-				tuple = root.getNextTuple();
+			List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
+			CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
+			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
+				printer.printRecord(headers);
+				Tuple tuple;
+				while ((tuple = root.getNextTuple()) != null) {
+					List<String> fields = new ArrayList<>(tuple.getTuple().size());
+					for (Value v : tuple.getTuple()) {
+						fields.add(v.toString());
+					}
+					printer.printRecord(fields);
+				}
 			}
-			// Close the writer
-			writer.close();
 
 			System.out.println("Query executed successfully!");
 			System.out.println("Output file: " + outputFile);

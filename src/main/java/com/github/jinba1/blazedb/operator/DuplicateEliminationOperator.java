@@ -48,7 +48,7 @@ public class DuplicateEliminationOperator extends Operator {
 
         // Return the next unique tuple if available
         if (tupleIterator.hasNext()) {
-            //tupleCounter ++;
+            tupleCounter++;
             return tupleIterator.next();
         }
 

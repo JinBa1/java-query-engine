@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
@@ -22,7 +21,6 @@ import org.junit.jupiter.api.Test;
 public class SelectOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
@@ -31,13 +29,9 @@ public class SelectOperatorTest {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
 
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " sid name age gpa\n");
-        }
-
         // Create test data file with varied sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
+            writer.write("sid, name, age, gpa\n");
             writer.write("1, 25, 85, 3\n");     // sid=1, name=25 (numeric stand-in), age=85, gpa=3
             writer.write("2, 30, 22, 4\n");     // sid=2, name=30, age=22, gpa=4
             writer.write("3, 35, 19, 2\n");     // sid=3, name=35, age=19, gpa=2
@@ -54,7 +48,6 @@ public class SelectOperatorTest {
     public void tearDown() throws IOException {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
@@ -69,7 +62,7 @@ public class SelectOperatorTest {
         // Should return just one tuple with sid=3
         Tuple tuple = selectOp.getNextTuple();
         assertNotNull(tuple, "Should return a tuple");
-        assertEquals(Integer.valueOf(3), tuple.getAttribute(0), "Tuple should have sid=3");
+        assertEquals(new IntValue(3), tuple.getAttribute(0), "Tuple should have sid=3");
 
         // No more tuples should be returned
         assertNull(selectOp.getNextTuple(), "Should have no more matching tuples");
@@ -85,8 +78,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return three tuples with age < 30 (students 2, 3, and 4)
-        List<Integer> expectedSids = Arrays.asList(2, 3, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(2, 3, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -94,7 +87,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(3, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -109,8 +102,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return two tuples (students 2 and 4)
-        List<Integer> expectedSids = Arrays.asList(2, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(2, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -118,7 +111,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(2, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -148,8 +141,8 @@ public class SelectOperatorTest {
         // Only student with sid=4 has matching gpa=3
         Tuple tuple = selectOp.getNextTuple();
         assertNotNull(tuple, "Should return another tuple");
-        assertEquals(Integer.valueOf(4), tuple.getAttribute(0), "Tuple should have sid=4");
-        assertEquals(Integer.valueOf(4), tuple.getAttribute(3), "Tuple should have gpa=4");
+        assertEquals(new IntValue(4), tuple.getAttribute(0), "Tuple should have sid=4");
+        assertEquals(new IntValue(4), tuple.getAttribute(3), "Tuple should have gpa=4");
 
         // No more tuples should be returned
         assertNull(selectOp.getNextTuple(), "Should have no more matching tuples");
@@ -166,8 +159,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return students 1, 2, and 4
-        List<Integer> expectedSids = Arrays.asList(1, 2, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(1, 2, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -175,7 +168,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(3, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -190,7 +183,7 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Get all matching tuples first time
-        List<Integer> firstRunSids = new ArrayList<>();
+        List<Value> firstRunSids = new ArrayList<>();
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
             firstRunSids.add(tuple.getAttribute(0));
@@ -201,7 +194,7 @@ public class SelectOperatorTest {
         // Reset and get tuples again
         selectOp.reset();
 
-        List<Integer> secondRunSids = new ArrayList<>();
+        List<Value> secondRunSids = new ArrayList<>();
         while ((tuple = selectOp.getNextTuple()) != null) {
             secondRunSids.add(tuple.getAttribute(0));
         }

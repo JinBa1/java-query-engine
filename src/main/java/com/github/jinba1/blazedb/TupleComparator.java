@@ -37,11 +37,9 @@ public class TupleComparator implements Comparator<Tuple> {
     @Override
     public int compare(Tuple t1, Tuple t2) {
         for (Integer columnIndex : sortColumnIndices) {
-            int value1 = t1.getAttribute(columnIndex);
-            int value2 = t2.getAttribute(columnIndex);
-
-            if (value1 != value2) {
-                return value1 - value2; // Ascending order
+            int cmp = t1.getAttribute(columnIndex).compareTo(t2.getAttribute(columnIndex));
+            if (cmp != 0) {
+                return cmp; // Ascending order
             }
         }
         return 0; // Tuples are equal

@@ -28,10 +28,10 @@ public class SumOperator extends Operator {
     private List<Integer> outputIndices;
 
     // Map of groups and their aggregate values
-    private Map<List<Integer>, List<Integer>> groupAggregates;
+    private Map<List<Value>, List<Integer>> groupAggregates;
 
     // Iterator for returning grouped results
-    private Iterator<Map.Entry<List<Integer>, List<Integer>>> resultIterator;
+    private Iterator<Map.Entry<List<Value>, List<Integer>>> resultIterator;
 
     // Flag to track if all input has been processed
     private boolean processed;
@@ -113,17 +113,19 @@ public class SumOperator extends Operator {
 
         // Return the next result if available
         if (resultIterator.hasNext()) {
-            Map.Entry<List<Integer>, List<Integer>> entry = resultIterator.next();
-            List<Integer> groupKeys = entry.getKey();
+            Map.Entry<List<Value>, List<Integer>> entry = resultIterator.next();
+            List<Value> groupKeys = entry.getKey();
             List<Integer> aggregateValues = entry.getValue();
 
             // Construct the result tuple from output columns and aggregate values
-            ArrayList<Integer> resultAttributes = new ArrayList<>();
+            ArrayList<Value> resultAttributes = new ArrayList<>();
 
             // If no GROUP BY, just return aggregate values
             if (groupByColumns.isEmpty()) {
-                resultAttributes.addAll(aggregateValues);
-                //tupleCounter++;
+                for (Integer agg : aggregateValues) {
+                    resultAttributes.add(new IntValue(agg));
+                }
+                tupleCounter++;
                 return new Tuple(resultAttributes);
             }
 
@@ -138,9 +140,11 @@ public class SumOperator extends Operator {
             }
 
             // Add aggregate values to the result
-            resultAttributes.addAll(aggregateValues);
+            for (Integer agg : aggregateValues) {
+                resultAttributes.add(new IntValue(agg));
+            }
 
-            //tupleCounter++;
+            tupleCounter++;
             return new Tuple(resultAttributes);
         }
 
@@ -160,7 +164,7 @@ public class SumOperator extends Operator {
         Tuple tuple;
         while ((tuple = child.getNextTuple()) != null) {
             // Extract group key values (empty list if no grouping)
-            List<Integer> groupKey = new ArrayList<>();
+            List<Value> groupKey = new ArrayList<>();
             for (Integer index : groupByIndices) {
                 groupKey.add(tuple.getAttribute(index));
             }
@@ -179,9 +183,14 @@ public class SumOperator extends Operator {
                     if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
                         Expression innerExpr = (Expression) function.getParameters().get(0);
                         // Evaluate the expression for this tuple
-                        int value = evaluator.evaluateValue(innerExpr, tuple);
+                        Value value = evaluator.evaluateValue(innerExpr, tuple);
+                        if (!(value instanceof IntValue iv)) {
+                            throw new QueryExecutionException(
+                                    "SUM requires int values; got " + value.typeName()
+                                            + " value '" + value + "' from expression '" + innerExpr + "'");
+                        }
                         // Add to the current aggregate value
-                        aggregates.set(i, aggregates.get(i) + value);
+                        aggregates.set(i, aggregates.get(i) + iv.v());
                     }
                 }
             }

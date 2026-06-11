@@ -1,11 +1,17 @@
 package com.github.jinba1.blazedb;
 
-import java.io.BufferedReader;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Stream;
+
 /**
  * The DBCatalog class serves as a central repository for database metadata in BlazeDB.
  * It implements the singleton pattern to ensure a single, consistent view of database structure
@@ -13,8 +19,9 @@ import java.util.stream.Stream;
  * This class maintains information about:
  * 1. Database table locations on disk
  * 2. Table schemas (column names and their positions)
- * 3. Intermediate schemas generated during query processing
- * 4. Schema transformation tracking for operations like projection and join
+ * 3. Column types inferred from CSV data
+ * 4. Intermediate schemas generated during query processing
+ * 5. Schema transformation tracking for operations like projection and join
  * The catalog provides methods to register, retrieve, and resolve schema information,
  * supporting the dynamic schema transformations that occur during query execution.
  * It plays a critical role in column name resolution during expression evaluation
@@ -26,6 +33,7 @@ public class DBCatalog {
 
     private final Map<String, Path> dbLocations;
     private final Map<String, Map<String, Integer>> dbSchemata;
+    private final Map<String, List<ColumnType>> dbColumnTypes;
 
     private final Map<String, Map<String, Integer>> intermediateSchemata;
 
@@ -35,17 +43,17 @@ public class DBCatalog {
     private final Map<String, List<String>> schemaMultiParentMap;
 
     private final Map<String, Map<String, String>> columnOriginMap;
+
     /**
      * Private constructor to ensure singleton design.
      */
     private DBCatalog() {
         dbLocations = new HashMap<>();
         dbSchemata = new HashMap<>();
+        dbColumnTypes = new HashMap<>();
         intermediateSchemata = new HashMap<>();
         schemaParentMap = new HashMap<>();
-
         schemaMultiParentMap = new HashMap<>();
-
         columnOriginMap = new HashMap<>();
     }
 
@@ -65,7 +73,7 @@ public class DBCatalog {
     /**
      * Initializes the database catalog with schema information from the specified directory.
      * This method should be called before using the catalog for the first time.
-     * @param dBDirectory The directory containing database schema and data files
+     * @param dBDirectory The directory containing database data files
      */
     public static void initDBCatalog(String dBDirectory) {
         if (instance == null) {
@@ -83,55 +91,87 @@ public class DBCatalog {
     }
 
     /**
-     * Loads database schema and location information from files in the specified directory.
-     * Parses the schema.txt file to extract table and column definitions, and verifies
-     * the existence of corresponding data files.
-     * @param dBDirectory The directory containing database schema and data files
+     * Loads database schema and location information by scanning CSV files in the data directory.
+     * Column names are read from the CSV header row; column types are inferred from the data rows.
+     * @param dBDirectory The directory containing the data subdirectory with CSV files
      */
     private void loadDBCatalog(String dBDirectory) {
-        try {
-            Path dBPath = Paths.get(dBDirectory);
-            Path schemaPath = dBPath.resolve(Constants.SCHEMA_FILE_NAME);
-            Path dataPath = dBPath.resolve(Constants.DATA_DIRECTORY_NAME);
-            try (BufferedReader schemaReader = Files.newBufferedReader(schemaPath)) {
-                String line;
-                while ((line = schemaReader.readLine()) != null) {
-                    String[] parts = line.split(Constants.SPLITTER_REGEX);
-                    String tableName = parts[0];
-
-                    Map<String, Integer> columnMap = new HashMap<>();
-                    for (int i = 1; i < parts.length; i++) {
-                        columnMap.put(parts[i].toLowerCase(), i - 1); //to lower case
-                    }
-
-                    dbSchemata.put(tableName, columnMap);
-
-                    Path dataFilePath = dataPath.resolve(tableName + ".csv");
-                    dbLocations.put(tableName, dataFilePath);
-                }
-            }
-
-            //Verify data file exists
-            if (Files.exists(dataPath) && Files.isDirectory(dataPath)) {
-                try (Stream<Path> files = Files.list(dataPath)) {
-                    files.forEach(file -> {
-                        String fileName = file.getFileName().toString();
-                        if (fileName.endsWith(".csv")) {
-                            String tableName = fileName.substring(0, fileName.length() - 4);
-                            if (!dbSchemata.containsKey(tableName)) {
-                                System.err.println("Warning: Found data file " + fileName +
-                                        " but no schema definition");
-                            }
-                        }
-                    });
-                }
-            }
-
-        } catch (Exception e) {
-            System.err.println("Error loading database schema: " + e.getMessage());
-            e.printStackTrace();
+        Path dataPath = Paths.get(dBDirectory).resolve(Constants.DATA_DIRECTORY_NAME);
+        if (!Files.isDirectory(dataPath)) {
+            throw new QueryExecutionException("Data directory not found: " + dataPath);
         }
+        try (Stream<Path> files = Files.list(dataPath)) {
+            List<Path> csvs = files
+                    .filter(f -> f.getFileName().toString().endsWith(".csv"))
+                    .sorted()
+                    .toList();
+            for (Path csv : csvs) {
+                String fileName = csv.getFileName().toString();
+                String tableName = fileName.substring(0, fileName.length() - 4);
+                loadTable(tableName, csv);
+            }
+        } catch (IOException e) {
+            throw new QueryExecutionException("Error scanning data directory " + dataPath + ": " + e.getMessage());
+        }
+    }
 
+    private void loadTable(String tableName, Path csv) throws IOException {
+        CSVFormat format = CSVFormat.RFC4180.builder()
+                .setIgnoreSurroundingSpaces(true)
+                .build();
+        try (CSVParser parser = CSVParser.parse(csv, StandardCharsets.UTF_8, format)) {
+            Iterator<CSVRecord> it = parser.iterator();
+            if (!it.hasNext()) {
+                throw new QueryExecutionException(
+                        "Table '" + tableName + "' has no header row (" + csv + ")");
+            }
+            CSVRecord header = it.next();
+            Map<String, Integer> columnMap = new HashMap<>();
+            int width = header.size();
+            for (int i = 0; i < width; i++) {
+                String col = header.get(i).trim().toLowerCase();
+                if (columnMap.putIfAbsent(col, i) != null) {
+                    throw new QueryExecutionException(
+                            "Table '" + tableName + "' has duplicate column '" + col + "' in header");
+                }
+            }
+
+            boolean[] isInt = new boolean[width];
+            Arrays.fill(isInt, true);
+            long rowNum = 1;
+            while (it.hasNext()) {
+                CSVRecord record = it.next();
+                rowNum++;
+                if (record.size() != width) {
+                    throw new QueryExecutionException("Table '" + tableName + "' row " + rowNum
+                            + ": expected " + width + " fields, found " + record.size());
+                }
+                for (int i = 0; i < width; i++) {
+                    if (isInt[i] && !parsesAsInt(record.get(i))) {
+                        isInt[i] = false;
+                    }
+                }
+            }
+
+            List<ColumnType> types = new ArrayList<>(width);
+            for (int i = 0; i < width; i++) {
+                types.add(isInt[i] ? ColumnType.INT : ColumnType.STRING);
+            }
+
+            dbSchemata.put(tableName, columnMap);
+            dbColumnTypes.put(tableName, types);
+            dbLocations.put(tableName, csv);
+        }
+    }
+
+    private static boolean parsesAsInt(String field) {
+        if (field == null || field.isEmpty()) return false;
+        try {
+            Integer.parseInt(field);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**
@@ -142,6 +182,7 @@ public class DBCatalog {
     public Path getDBLocation(String tableName) {
         return dbLocations.get(tableName);
     }
+
     /**
      * Returns the schema mapping for a specified table.
      * The mapping associates column names with their positions in the table.
@@ -151,6 +192,16 @@ public class DBCatalog {
     public Map<String, Integer> getDBSchemata(String tableName) {
         return dbSchemata.get(tableName);
     }
+
+    /**
+     * Returns the column types for a base table, in column order.
+     * @param tableName The name of the table
+     * @return A list of ColumnType values in column order, or null if table not found
+     */
+    public List<ColumnType> getColumnTypes(String tableName) {
+        return dbColumnTypes.get(tableName);
+    }
+
     /**
      * Checks if a specified table exists in the database.
      * @param tableName The name of the table to check
@@ -172,6 +223,7 @@ public class DBCatalog {
         }
         return dbSchemata.get(tableName).containsKey(columnName.toLowerCase());
     }
+
     /**
      * Helper method for registering schema transformation.
      * Registers an intermediate schema created during query processing.
@@ -214,11 +266,6 @@ public class DBCatalog {
                                                    Map<String, String> transformationDetails) {
         String schemaId = registerIntermediateSchema(schema);
 
-//        if (schemaId == null) {
-//            System.err.println("ERROR: Failed to register intermediate schema");
-//            return null;
-//        }
-
         // Record parent relationship
         if (parentSchemaId != null) {
             schemaParentMap.put(schemaId, parentSchemaId);
@@ -237,6 +284,7 @@ public class DBCatalog {
 
         return schemaId;
     }
+
     /**
      * Returns the parent schema ID for a given schema.
      * @param schemaId The schema ID to look up
@@ -245,6 +293,7 @@ public class DBCatalog {
     public String getParentSchemaId(String schemaId) {
         return schemaParentMap.get(schemaId);
     }
+
     /**
      * Adds a parent schema relationship.
      * Used for operators with multiple inputs like JOIN.
@@ -276,6 +325,46 @@ public class DBCatalog {
         } else {
             return dbSchemata.get(schemaId);
         }
+    }
+
+    /**
+     * Result-header names for a schema, in column order.
+     * Plain columns are bare-ified (qualifier stripped: "student.a" -> "a");
+     * aggregate keys (containing '(') are kept whole, lowercased.
+     * Schemas may contain alias keys (bare and qualified forms mapping to the
+     * same index), so column count is max index + 1, not map size; keys are
+     * visited in sorted order so the chosen name is deterministic.
+     */
+    public List<String> getOrderedColumnNames(String schemaId) {
+        Map<String, Integer> schema = getSchema(schemaId);
+        if (schema == null) {
+            throw new QueryExecutionException("Unknown schema: " + schemaId);
+        }
+        int width = 0;
+        for (Integer idx : schema.values()) {
+            if (idx + 1 > width) width = idx + 1;
+        }
+        String[] names = new String[width];
+        List<String> keys = new ArrayList<>(schema.keySet());
+        Collections.sort(keys);
+        for (String key : keys) {
+            int idx = schema.get(key);
+            String name = key.toLowerCase();
+            if (!name.contains("(")) {
+                int dot = name.lastIndexOf('.');
+                if (dot >= 0) name = name.substring(dot + 1);
+            }
+            if (names[idx] == null) {
+                names[idx] = name;
+            }
+        }
+        for (int i = 0; i < width; i++) {
+            if (names[i] == null) {
+                throw new QueryExecutionException(
+                        "Schema '" + schemaId + "' has no column name for index " + i);
+            }
+        }
+        return Arrays.asList(names);
     }
 
     /**

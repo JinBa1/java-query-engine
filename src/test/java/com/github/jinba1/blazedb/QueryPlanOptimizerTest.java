@@ -25,12 +25,13 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
 
         // This should be equivalent to a simple "SELECT * FROM Student"
         String expectedOutput =
-                "1, 25, 85, 30\n" +
-                        "2, 30, 22, 40\n" +
-                        "3, 35, 19, 20\n" +
-                        "4, 40, 21, 40\n" +
-                        "5, 45, 65, 30\n" +
-                        "6, 50, 32, 10\n";
+                "a,b,c,d\n" +
+                        "1,25,85,30\n" +
+                        "2,30,22,40\n" +
+                        "3,35,19,20\n" +
+                        "4,40,21,40\n" +
+                        "5,45,65,30\n" +
+                        "6,50,32,10\n";
 
         runTest(queryName, queryContent, expectedOutput);
 
@@ -49,12 +50,13 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
 
         // Should be equivalent to "SELECT * FROM Student"
         String expectedOutput =
-                "1, 25, 85, 30\n" +
-                        "2, 30, 22, 40\n" +
-                        "3, 35, 19, 20\n" +
-                        "4, 40, 21, 40\n" +
-                        "5, 45, 65, 30\n" +
-                        "6, 50, 32, 10\n";
+                "a,b,c,d\n" +
+                        "1,25,85,30\n" +
+                        "2,30,22,40\n" +
+                        "3,35,19,20\n" +
+                        "4,40,21,40\n" +
+                        "5,45,65,30\n" +
+                        "6,50,32,10\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
@@ -71,8 +73,9 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         String queryContent = "SELECT Student.A, Student.B FROM Student WHERE Student.D > 30 AND Student.C < 50;";
 
         String expectedOutput =
-                "2, 30\n" +
-                        "4, 40\n";
+                "a,b\n" +
+                        "2,30\n" +
+                        "4,40\n";
 
         runTest(queryName, queryContent, expectedOutput);
 
@@ -90,9 +93,10 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         String queryContent = "SELECT Student.A, Student.B FROM Student WHERE Student.A > 3;";
 
         String expectedOutput =
-                "4, 40\n" +
-                        "5, 45\n" +
-                        "6, 50\n";
+                "a,b\n" +
+                        "4,40\n" +
+                        "5,45\n" +
+                        "6,50\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
@@ -110,7 +114,7 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         // Expected: Students with A = Course.E and Course.G > 3
         // From our test data, courses 104 and 106 have G > 3
         String expectedOutput =
-                "";
+                "a,e\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
@@ -127,7 +131,7 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
 
         // Expected: Students with D > 30 joined with Courses where E = Student.A
         String expectedOutput =
-                "";
+                "a,e\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
@@ -146,10 +150,11 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
                 "WHERE 1 = 1 AND Student.D > 20;";
 
         String expectedOutput =
-                "1, 25, 85, 30\n" +
-                        "2, 30, 22, 40\n" +
-                        "4, 40, 21, 40\n" +
-                        "5, 45, 65, 30\n";
+                "a,b,c,d\n" +
+                        "1,25,85,30\n" +
+                        "2,30,22,40\n" +
+                        "4,40,21,40\n" +
+                        "5,45,65,30\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
@@ -169,7 +174,8 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         // Expected: Complex join with optimized selection placement
         // The exact output depends on the test data
         String expectedOutput =
-                "4, 104, 65\n";
+                "a,e,k\n" +
+                        "4,104,65\n";
 
         runTest(queryName, queryContent, expectedOutput, false); // Order might vary
     }
@@ -188,12 +194,13 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         // If join order is preserved, we should get correct results
         // The exact output depends on the test data
         String expectedOutput =
-                "1, 101, 101\n" +
-                        "1, 102, 102\n" +
-                        "2, 101, 101\n" +
-                        "2, 103, 103\n" +
-                        "3, 102, 102\n" +
-                        "4, 104, 104\n";
+                "a,j,e\n" +
+                        "1,101,101\n" +
+                        "1,102,102\n" +
+                        "2,101,101\n" +
+                        "2,103,103\n" +
+                        "3,102,102\n" +
+                        "4,104,104\n";
 
         runTest(queryName, queryContent, expectedOutput, false); // Order might vary
     }
@@ -209,10 +216,11 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
                 "WHERE 1 = 1 GROUP BY Student.D;";
 
         String expectedOutput =
-                "10, 32\n" +
-                        "20, 19\n" +
-                        "30, 150\n" +
-                        "40, 43\n";
+                "d,sum(student.c)\n" +
+                        "20,19\n" +
+                        "40,43\n" +
+                        "10,32\n" +
+                        "30,150\n";
 
         runTest(queryName, queryContent, expectedOutput, false); // Order might vary
     }
@@ -227,12 +235,13 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
         String queryContent = "SELECT DISTINCT Student.A, Student.B, Student.C, Student.D FROM Student;";
 
         String expectedOutput =
-                "1, 25, 85, 30\n" +
-                        "2, 30, 22, 40\n" +
-                        "3, 35, 19, 20\n" +
-                        "4, 40, 21, 40\n" +
-                        "5, 45, 65, 30\n" +
-                        "6, 50, 32, 10\n";
+                "a,b,c,d\n" +
+                        "1,25,85,30\n" +
+                        "2,30,22,40\n" +
+                        "3,35,19,20\n" +
+                        "4,40,21,40\n" +
+                        "5,45,65,30\n" +
+                        "6,50,32,10\n";
 
         runTest(queryName, queryContent, expectedOutput, false); // Order might vary
     }
@@ -248,12 +257,13 @@ public class QueryPlanOptimizerTest extends BlazeDBTest {
                 "WHERE 1 = 1 ORDER BY Student.D;";
 
         String expectedOutput =
-                "6, 10\n" +
-                        "3, 20\n" +
-                        "1, 30\n" +
-                        "5, 30\n" +
-                        "2, 40\n" +
-                        "4, 40\n";
+                "a,d\n" +
+                        "6,10\n" +
+                        "3,20\n" +
+                        "1,30\n" +
+                        "5,30\n" +
+                        "2,40\n" +
+                        "4,40\n";
 
         runTest(queryName, queryContent, expectedOutput);
     }
