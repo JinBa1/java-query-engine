@@ -733,6 +733,11 @@ public class QueryPlanOptimizer {
             return scanOp;
         }
 
+        // Sort columns deterministically (by table then column name) so describe() output is stable
+        tableColumns.sort(Comparator
+                .comparing((Column c) -> c.getTable() != null ? c.getTable().getName() : "")
+                .thenComparing(Column::getColumnName));
+
         // If we're not selecting all columns, add a projection
         Map<String, Integer> tableSchema = DBCatalog.getInstance().getDBSchemata(tableName);
         if (tableColumns.size() < tableSchema.size()) {

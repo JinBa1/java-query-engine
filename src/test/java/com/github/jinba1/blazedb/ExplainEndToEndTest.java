@@ -76,4 +76,19 @@ public class ExplainEndToEndTest {
         assertThrows(QueryExecutionException.class,
                 () -> QueryPlanner.planQuery(q.toString()));
     }
+
+    @Test
+    public void cliWritesExplainTextToOutputFile() throws IOException {
+        Path q = tempDb.resolve("explain.sql");
+        Files.writeString(q, "EXPLAIN SELECT * FROM Sales WHERE Sales.qty > 5;");
+        Path out = tempDb.resolve("explain-out.txt");
+
+        int code = BlazeDB.run(new String[]{tempDb.toString(), q.toString(), out.toString()});
+
+        assertEquals(0, code);
+        String text = Files.readString(out);
+        assertTrue(text.startsWith("=== Plan (as written) ===\n"), text);
+        assertTrue(text.contains("=== Plan (optimized) ===\n"), text);
+        assertTrue(text.contains("Scan[Sales]"), text);
+    }
 }

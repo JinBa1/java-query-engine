@@ -203,7 +203,11 @@ public class QueryPlanner {
         // SELECT COUNT(*) FROM t with no WHERE/GROUP BY needs no columns at all;
         // a zero-column projection is meaningless, so skip it.
         if (!requiredColumns.isEmpty()) {
-            rootOp = new ProjectOperator(rootOp, new ArrayList<>(requiredColumns));
+            List<Column> sortedColumns = new ArrayList<>(requiredColumns);
+            sortedColumns.sort(Comparator
+                    .comparing((Column c) -> c.getTable() != null ? c.getTable().getName() : "")
+                    .thenComparing(Column::getColumnName));
+            rootOp = new ProjectOperator(rootOp, sortedColumns);
         }
 
         return new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);

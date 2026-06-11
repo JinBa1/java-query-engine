@@ -130,11 +130,11 @@ a,b,c,d
 
 ## Running Examples
 
-The `samples/` directory ships with 19 queries and a small dataset (Student, Course, Enrolled, Staff tables). Expected output lives in `samples/expected_output/`.
+The `samples/` directory ships with 20 queries and a small dataset (Student, Course, Enrolled, Staff tables). Expected output lives in `samples/expected_output/`.
 
 ```bash
 # Run all sample queries and diff against expected output
-for i in $(seq 1 19); do
+for i in $(seq 1 20); do
   java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
     com.github.jinba1.blazedb.BlazeDB \
     samples/db "samples/input/query${i}.sql" "/tmp/out${i}.csv"
@@ -158,8 +158,8 @@ The test suite covers individual operators, the query planner, the optimiser, ex
 ├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests
 ├── samples/
 │   ├── db/data/                                 # CSV data files (header row + data rows)
-│   ├── input/query[1-19].sql                    # Sample queries
-│   └── expected_output/query[1-19].csv          # Expected results
+│   ├── input/query[1-20].sql                    # Sample queries
+│   └── expected_output/query[1-20].csv          # Expected results
 ├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7, commons-csv 1.14.1)
 ├── mvnw / mvnw.cmd                              # Maven Wrapper
 └── LICENSE

@@ -199,31 +199,36 @@ public class QueryOptimizationBenchmarkTest extends BlazeDBTest {
      * Runs a query and returns the total tuple count processed by all operators.
      */
     private long runQueryWithTupleCount(String queryName, String queryContent, boolean optimize) throws IOException {
-        // Set optimization flag
-        Constants.useQueryOptimization = optimize;
+        boolean savedOptimization = Constants.useQueryOptimization;
+        try {
+            // Set optimization flag
+            Constants.useQueryOptimization = optimize;
 
-        // Reset catalog
-        DBCatalog.resetDBCatalog();
-        DBCatalog.initDBCatalog(TEST_DB_DIR);
+            // Reset catalog
+            DBCatalog.resetDBCatalog();
+            DBCatalog.initDBCatalog(TEST_DB_DIR);
 
-        // Create query file
-        String queryFilePath = Paths.get(TEST_QUERIES_DIR, queryName + ".sql").toString();
-        Files.write(Paths.get(queryFilePath), queryContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            // Create query file
+            String queryFilePath = Paths.get(TEST_QUERIES_DIR, queryName + ".sql").toString();
+            Files.write(Paths.get(queryFilePath), queryContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
-        // Parse and execute
-        Operator rootOp = QueryPlanner.parseStatement(queryFilePath);
+            // Parse and execute
+            Operator rootOp = QueryPlanner.parseStatement(queryFilePath);
 
-        // Reset tuple counters before execution
-        resetAllTupleCounters(rootOp);
+            // Reset tuple counters before execution
+            resetAllTupleCounters(rootOp);
 
-        // Execute query (write to output to consume all tuples)
-        String outputFilePath = Paths.get(TEST_OUTPUT_DIR, queryName + ".csv").toString();
-        BlazeDB.execute(rootOp, outputFilePath);
+            // Execute query (write to output to consume all tuples)
+            String outputFilePath = Paths.get(TEST_OUTPUT_DIR, queryName + ".csv").toString();
+            BlazeDB.execute(rootOp, outputFilePath);
 
-        // Collect scan tuple count (measures actual data read from disk)
-        long scanCount = collectScanTupleCount(rootOp);
+            // Collect scan tuple count (measures actual data read from disk)
+            long scanCount = collectScanTupleCount(rootOp);
 
-        return scanCount;
+            return scanCount;
+        } finally {
+            Constants.useQueryOptimization = savedOptimization;
+        }
     }
 
     /**

@@ -5,15 +5,13 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.github.jinba1.blazedb.operator.Operator;
-
 /**
- * Runs all 19 sample queries and diffs output against expected results.
+ * Runs all 20 sample queries and diffs output against expected results.
  * Exit code 0 if all pass, 1 if any fail.
  */
 public class SampleQueryRunner {
 
-    private static final int QUERY_COUNT = 19;
+    private static final int QUERY_COUNT = 20;
 
     public static void main(String[] args) throws Exception {
         Path projectRoot = Paths.get("").toAbsolutePath();
@@ -36,8 +34,12 @@ public class SampleQueryRunner {
             try {
                 DBCatalog.resetDBCatalog();
                 DBCatalog.initDBCatalog(dbDir.toString());
-                Operator rootOp = QueryPlanner.parseStatement(queryFile.toString());
-                BlazeDB.execute(rootOp, outputFile.toString());
+                PlannedQuery planned = QueryPlanner.planQuery(queryFile.toString());
+                if (planned.explainText() != null) {
+                    Files.writeString(outputFile, planned.explainText());
+                } else {
+                    BlazeDB.execute(planned.root(), outputFile.toString());
+                }
 
                 String actual = normalize(readFile(outputFile));
                 String expected = normalize(readFile(expectedFile));

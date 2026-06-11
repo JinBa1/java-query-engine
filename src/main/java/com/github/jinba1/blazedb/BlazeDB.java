@@ -1,6 +1,8 @@
 package com.github.jinba1.blazedb;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,7 +62,16 @@ public class BlazeDB {
 		try {
 			DBCatalog.resetDBCatalog();
 			DBCatalog.initDBCatalog(args[0]);
-			Operator rootOp = QueryPlanner.parseStatement(args[1]);
+			PlannedQuery planned = QueryPlanner.planQuery(args[1]);
+
+			if (planned.explainText() != null) {
+				// EXPLAIN: write the plan text, execute nothing; budgets don't apply
+				Files.writeString(Path.of(args[2]), planned.explainText());
+				System.out.println("Explain written to: " + args[2]);
+				return 0;
+			}
+
+			Operator rootOp = planned.root();
 			if (rootOp == null) {
 				System.err.println("Error: query could not be planned");
 				return 1;
@@ -72,6 +83,9 @@ public class BlazeDB {
 			return 0;
 		} catch (QueryExecutionException e) {
 			System.err.println("Error: " + e.getMessage());
+			return 1;
+		} catch (IOException e) {
+			System.err.println("Error: failed to write output: " + e.getMessage());
 			return 1;
 		}
 	}

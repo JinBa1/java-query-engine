@@ -1,0 +1,1 @@
+EXPLAIN SELECT Student.B, SUM(Student.C) FROM Student, Enrolled WHERE Student.A = Enrolled.A AND Student.D > 30 GROUP BY Student.B;
