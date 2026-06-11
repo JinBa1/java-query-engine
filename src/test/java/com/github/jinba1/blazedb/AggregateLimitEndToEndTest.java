@@ -121,6 +121,48 @@ public class AggregateLimitEndToEndTest {
         assertTrue(ex.getMessage().contains("region"), ex.getMessage());
     }
 
+    /** Writes the SQL, inits the catalog, and asserts planning rejects it. */
+    private QueryExecutionException assertPlanRejected(String sql) throws IOException {
+        Path query = tempDb.resolve("rej-" + System.nanoTime() + ".sql");
+        Files.writeString(query, sql);
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        return assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.parseStatement(query.toString()));
+    }
+
+    @Test
+    public void selectStarWithAggregatesIsRejected() throws IOException {
+        writeSales();
+        QueryExecutionException ex = assertPlanRejected("SELECT *, COUNT(*) FROM Sales;");
+        assertTrue(ex.getMessage().contains("*"), ex.getMessage());
+    }
+
+    @Test
+    public void selectStarWithGroupByIsRejected() throws IOException {
+        writeSales();
+        QueryExecutionException ex = assertPlanRejected(
+                "SELECT * FROM Sales GROUP BY Sales.region;");
+        assertTrue(ex.getMessage().contains("*"), ex.getMessage());
+    }
+
+    @Test
+    public void nonAggregateFunctionWithAggregatesIsRejected() throws IOException {
+        writeSales();
+        QueryExecutionException ex = assertPlanRejected(
+                "SELECT UPPER(Sales.region), COUNT(*) FROM Sales;");
+        assertTrue(ex.getMessage().contains("UPPER"), ex.getMessage());
+    }
+
+    @Test
+    public void selectedColumnMissingFromGroupByIsRejected() throws IOException {
+        writeSales();
+        QueryExecutionException ex = assertPlanRejected(
+                "SELECT Sales.region, Sales.qty, COUNT(*) FROM Sales GROUP BY Sales.region;");
+        assertTrue(ex.getMessage().contains("qty"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("GROUP BY"), ex.getMessage());
+    }
+
     @Test
     public void limitCapsResultAfterOrderBy() throws IOException {
         writeSales();

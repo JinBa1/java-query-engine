@@ -267,21 +267,64 @@ public class QueryPlanner {
     }
 
     /**
-     * Rejects bare columns selected alongside aggregates without GROUP BY — the engine
-     * would otherwise silently drop them, which misleads agent callers.
+     * Validates the SELECT list of aggregate / GROUP BY queries at plan time — the engine
+     * would otherwise silently drop unsupported items (or fail late with a generic runtime
+     * error), which misleads agent callers. Rules:
+     * - every SELECT item must be an aggregate call or a plain column;
+     * - SELECT * cannot be combined with aggregates or GROUP BY;
+     * - without GROUP BY, no bare columns may appear alongside aggregates;
+     * - with GROUP BY, every selected bare column must appear in the GROUP BY list.
      */
     private static void validateAggregateQuery(Select select) {
-        if (!existAggregate(select) || existGroupByOp(select)) {
+        boolean hasAggregates = existAggregate(select);
+        boolean hasGroupBy = existGroupByOp(select);
+        if (!hasAggregates && !hasGroupBy) {
             return;
         }
-        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
-            Expression expr = item.getExpression();
-            if (expr instanceof Column column) {
-                throw new QueryExecutionException(
-                        "Non-aggregate column '" + column
-                                + "' in SELECT with aggregates requires GROUP BY");
+
+        Set<String> groupByKeys = new HashSet<>();
+        if (hasGroupBy) {
+            for (Column column : extractGroupByColumns(select)) {
+                groupByKeys.add(columnKey(column));
             }
         }
+
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
+            Expression expr = item.getExpression();
+
+            if (expr instanceof Function function
+                    && AggregateFunction.fromFunctionName(function.getName()) != null) {
+                continue; // aggregate call — validated by extractAggregateCalls
+            }
+            if (expr instanceof AllColumns) {
+                throw new QueryExecutionException(
+                        "SELECT * cannot be combined with aggregates or GROUP BY; "
+                                + "list the columns explicitly");
+            }
+            if (expr instanceof Column column) {
+                if (!hasGroupBy) {
+                    throw new QueryExecutionException(
+                            "Non-aggregate column '" + column
+                                    + "' in SELECT with aggregates requires GROUP BY");
+                }
+                if (!groupByKeys.contains(columnKey(column))) {
+                    throw new QueryExecutionException(
+                            "Column '" + column + "' in SELECT must appear in GROUP BY");
+                }
+                continue;
+            }
+            throw new QueryExecutionException(
+                    "Unsupported SELECT item '" + expr + "' with aggregates or GROUP BY; "
+                            + "only aggregate functions and grouped columns are allowed");
+        }
+    }
+
+    /** Case-insensitive identity key for a column reference ("table.col" or bare "col"). */
+    private static String columnKey(Column column) {
+        String table = column.getTable() != null && column.getTable().getName() != null
+                ? column.getTable().getName().toLowerCase() + "."
+                : "";
+        return table + column.getColumnName().toLowerCase();
     }
 
     /**

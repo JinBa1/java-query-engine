@@ -148,7 +148,7 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (288 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (292 tests).
 
 ## Project Structure
 

@@ -133,7 +133,7 @@ java-query-engine/
 ## COMMANDS
 
 ```bash
-# Run the full test suite (288 tests)
+# Run the full test suite (292 tests)
 ./mvnw test
 
 # Build the fat JAR explicitly
@@ -166,7 +166,7 @@ The README displays CI, Coverage (Codecov), and Dependencies badges at the top.
 
 ## NOTES
 
-- The test suite currently passes 288 tests with zero failures or errors: `Tests run: 288, Failures: 0, Errors: 0, Skipped: 0`.
+- The test suite currently passes 292 tests with zero failures or errors: `Tests run: 292, Failures: 0, Errors: 0, Skipped: 0`.
 - The benchmarking/tuple-counter infrastructure was introduced in commit `ef92ca1` ("feat: add query optimization benchmark suite with tuple counters"): `Operator` gained `protected long tupleCounter` with `getTupleCount()` / `resetTupleCount()`, and `QueryOptimizationBenchmarkTest` was added as one of the 20 test files.
 - `SampleQueryRunner.java` provides an automated 19-query diff runner: it runs all queries in `samples/input/` against `samples/db/` and diffs each result against `samples/expected_output/`, reporting pass/fail. There is no need to diff manually.
 - A `.gitignore` exists at the repository root. It ignores `target/`, `*.iml`, `.DS_Store`, `*.class`, `.omo/`, and the test-resource output directories (`src/test/resources/test_integration_output/`, `src/test/resources/test_sample_output/`, `src/test/resources/test_integration_queries/`).
