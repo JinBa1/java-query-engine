@@ -11,24 +11,74 @@ import com.github.jinba1.blazedb.operator.Operator;
 
 /**
  * Lightweight in-memory relational query engine.
- * CLI interface: database_dir input_file output_file
+ * CLI interface: database_dir input_file output_file [--max-tuples=N] [--timeout-ms=N]
  */
 public class BlazeDB {
 	public static void main(String[] args) {
+		int code = run(args);
+		if (code != 0) {
+			System.exit(code);
+		}
+	}
 
-		if (args.length != 3) {
-			System.err.println("Usage: BlazeDB database_dir input_file output_file");
-			return;
+	/**
+	 * CLI entry minus System.exit, so tests can call it directly.
+	 * @return process exit code: 0 on success, 1 on any error
+	 */
+	static int run(String[] args) {
+		if (args.length < 3) {
+			usage();
+			return 1;
 		}
 
-		String databaseDir = args[0];
-		String inputFile = args[1];
-		String outputFile = args[2];
+		Long maxTuples = null;
+		Long timeoutMs = null;
+		for (int i = 3; i < args.length; i++) {
+			String arg = args[i];
+			try {
+				if (arg.startsWith("--max-tuples=")) {
+					maxTuples = Long.parseLong(arg.substring("--max-tuples=".length()));
+				} else if (arg.startsWith("--timeout-ms=")) {
+					timeoutMs = Long.parseLong(arg.substring("--timeout-ms=".length()));
+				} else {
+					System.err.println("Unknown option: " + arg);
+					usage();
+					return 1;
+				}
+			} catch (NumberFormatException e) {
+				System.err.println("Invalid number in option: " + arg);
+				usage();
+				return 1;
+			}
+		}
+		if ((maxTuples != null && maxTuples < 0) || (timeoutMs != null && timeoutMs < 0)) {
+			System.err.println("Budget values must be non-negative");
+			usage();
+			return 1;
+		}
 
-		DBCatalog.resetDBCatalog();
-		DBCatalog.initDBCatalog(databaseDir);
-		Operator rootOp = QueryPlanner.parseStatement(inputFile);
-		execute(rootOp, outputFile);
+		try {
+			DBCatalog.resetDBCatalog();
+			DBCatalog.initDBCatalog(args[0]);
+			Operator rootOp = QueryPlanner.parseStatement(args[1]);
+			if (rootOp == null) {
+				System.err.println("Error: query could not be planned");
+				return 1;
+			}
+			if (maxTuples != null || timeoutMs != null) {
+				rootOp.attachBudget(new QueryBudget(maxTuples, timeoutMs));
+			}
+			execute(rootOp, args[2]);
+			return 0;
+		} catch (QueryExecutionException e) {
+			System.err.println("Error: " + e.getMessage());
+			return 1;
+		}
+	}
+
+	private static void usage() {
+		System.err.println(
+				"Usage: BlazeDB database_dir input_file output_file [--max-tuples=N] [--timeout-ms=N]");
 	}
 
 	/**
@@ -50,16 +100,24 @@ public class BlazeDB {
 
 			List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
 			CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
-			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
-				printer.printRecord(headers);
-				Tuple tuple;
-				while ((tuple = root.getNextTuple()) != null) {
-					List<String> fields = new ArrayList<>(tuple.getTuple().size());
-					for (Value v : tuple.getTuple()) {
-						fields.add(v.toString());
+			try {
+				try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
+					printer.printRecord(headers);
+					Tuple tuple;
+					while ((tuple = root.getNextTuple()) != null) {
+						List<String> fields = new ArrayList<>(tuple.getTuple().size());
+						for (Value v : tuple.getTuple()) {
+							fields.add(v.toString());
+						}
+						printer.printRecord(fields);
 					}
-					printer.printRecord(fields);
 				}
+			} catch (QueryExecutionException e) {
+				// Never leave a truncated file that looks like a complete result
+				if (!outputFileObj.delete() && outputFileObj.exists()) {
+					System.err.println("Warning: failed to delete partial output: " + outputFile);
+				}
+				throw e;
 			}
 
 			System.out.println("Query executed successfully!");
