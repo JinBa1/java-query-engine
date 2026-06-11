@@ -115,7 +115,7 @@ public class AggregateOperator extends Operator {
                 for (Accumulator accumulator : entry.getValue()) {
                     resultAttributes.add(accumulator.result());
                 }
-                tupleCounter++;
+                countTuple();
                 return new Tuple(resultAttributes);
             }
 
@@ -134,7 +134,7 @@ public class AggregateOperator extends Operator {
                 resultAttributes.add(accumulator.result());
             }
 
-            tupleCounter++;
+            countTuple();
             return new Tuple(resultAttributes);
         }
 

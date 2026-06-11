@@ -3,6 +3,8 @@ package com.github.jinba1.blazedb.operator;
 import com.github.jinba1.blazedb.*;
 import net.sf.jsqlparser.expression.Expression;
 
+// QueryBudget is imported transitively via the wildcard above
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -78,7 +80,7 @@ public class JoinOperator extends Operator {
 //                    ", columns: " + combined.getTuple().size());
 
             if (expression == null  || evaluator.evaluate(expression, combined)) {
-                tupleCounter++;
+                countTuple();
                 return combined;  // pass join condition if having one
             }
         }
@@ -125,6 +127,17 @@ public class JoinOperator extends Operator {
      */
     public Operator getOuterChild() {
         return outerChild;
+    }
+
+    /**
+     * Attaches the budget to this join and both children (outer and inner subtrees).
+     */
+    @Override
+    public void attachBudget(QueryBudget budget) {
+        super.attachBudget(budget); // covers this + inner child
+        if (outerChild != null) {
+            outerChild.attachBudget(budget);
+        }
     }
 
     /**

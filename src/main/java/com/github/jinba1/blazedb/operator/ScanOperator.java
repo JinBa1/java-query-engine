@@ -99,7 +99,7 @@ public class ScanOperator extends Operator {
                 attributes.add(new StringValue(field));
             }
         }
-        tupleCounter++;
+        countTuple();
         return new Tuple(attributes);
     }
 

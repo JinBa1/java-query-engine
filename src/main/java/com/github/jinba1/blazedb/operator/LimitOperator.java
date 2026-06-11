@@ -36,7 +36,7 @@ public class LimitOperator extends Operator {
         Tuple tuple = child.getNextTuple();
         if (tuple != null) {
             emitted++;
-            tupleCounter++;
+            countTuple();
         }
         return tuple;
     }
