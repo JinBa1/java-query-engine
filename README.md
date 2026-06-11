@@ -26,7 +26,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 **Operator hierarchy** (all extend `Operator`):
 
-`ScanOperator` → `SelectOperator` → `ProjectOperator` → `JoinOperator` → `SortOperator` → `SumOperator` → `DuplicateEliminationOperator`
+`ScanOperator` → `SelectOperator` → `ProjectOperator` → `JoinOperator` → `SortOperator` → `AggregateOperator` → `DuplicateEliminationOperator` → `LimitOperator`
 
 ## Feature Matrix
 
@@ -36,7 +36,8 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | `WHERE` predicates | ✅ Supported |
 | Inner joins (nested-loop) | ✅ Supported |
 | `ORDER BY` | ✅ Supported |
-| `GROUP BY` + `SUM` | ✅ Supported |
+| `GROUP BY` + `SUM`, `COUNT`, `AVG`, `MIN`, `MAX` | ✅ Supported |
+| `LIMIT n` | ✅ Supported |
 | `DISTINCT` | ✅ Supported |
 | Nested arithmetic/comparison expressions | ✅ Supported |
 | Query optimisation (selection pushdown) | ✅ Supported |
@@ -53,7 +54,22 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 This engine supports **SQL-over-CSV query execution**: read-only queries against tables stored as CSV files. It does not support transactions, indexes, data modification (INSERT/UPDATE/DELETE), concurrency, persistence, or a full SQL dialect. Values are typed int or string, inferred per column from the data. Tables are discovered from CSV files with header rows; no separate schema file.
 
+Supported SQL features include `SELECT`/`FROM`/`WHERE`, `GROUP BY` with `SUM`, `COUNT`, `AVG`, `MIN`, and `MAX` aggregates, `ORDER BY`, `DISTINCT`, inner joins, and `LIMIT n`.
+
 The focus is on demonstrating query planning, optimisation, and the Volcano iterator execution model.
+
+### Aggregate and LIMIT semantics
+
+| Case | Behavior |
+|---|---|
+| `AVG` of ints | truncated integer division (toward zero) |
+| Aggregate over empty input, no `GROUP BY` | zero rows (header only) — deviates from SQL's NULL row |
+| `COUNT(col)` | equals `COUNT(*)` — the engine has no NULLs |
+| `SUM`/`AVG` on a string column | error |
+| `MIN`/`MAX` on strings | lexicographic |
+| `SUM` past int range | error |
+| `LIMIT 0` | header-only output |
+| `OFFSET`, `LIMIT ALL` | not supported (error) |
 
 ## Quick Start
 
@@ -132,13 +148,13 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (262 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (288 tests).
 
 ## Project Structure
 
 ```
-├── src/main/java/com/github/jinba1/blazedb/   # Core engine (27 files)
-│   └── operator/                                # Volcano operators (8 files)
+├── src/main/java/com/github/jinba1/blazedb/   # Core engine (31 files)
+│   └── operator/                                # Volcano operators (10 files)
 ├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests
 ├── samples/
 │   ├── db/data/                                 # CSV data files (header row + data rows)

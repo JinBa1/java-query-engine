@@ -1,8 +1,8 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-06-11
-**Commit:** 6fba02a
-**Branch:** feat/typed-columns
+**Commit:** e4fa19d
+**Branch:** feat/sql-aggregates-limit
 
 ## OVERVIEW
 
@@ -21,11 +21,11 @@ java-query-engine/
 │   ├── db/
 │   │   └── data/                    # CSV data files (header row + data rows)
 │   ├── input/
-│   │   └── query[1-12].sql          # 12 sample queries
+│   │   └── query[1-19].sql          # 19 sample queries
 │   └── expected_output/
-│       └── query[1-12].csv          # expected results
+│       └── query[1-19].csv          # expected results
 └── src/
-    ├── main/java/com/github/jinba1/blazedb/   # 19 core files
+    ├── main/java/com/github/jinba1/blazedb/   # 21 core files
     │   ├── BlazeDB.java
     │   ├── QueryPlanner.java
     │   ├── QueryPlanOptimizer.java
@@ -45,16 +45,20 @@ java-query-engine/
     │   ├── StringValue.java
     │   ├── ColumnType.java
     │   ├── QueryExecutionException.java
-    │   └── operator/                # 8 operator files (1 abstract base + 7 concrete)
+    │   ├── AggregateFunction.java
+    │   ├── AggregateCall.java
+    │   └── operator/                # 10 operator files (1 abstract base + 9 concrete)
     │       ├── Operator.java
     │       ├── ScanOperator.java
     │       ├── SelectOperator.java
     │       ├── ProjectOperator.java
     │       ├── JoinOperator.java
     │       ├── SortOperator.java
-    │       ├── SumOperator.java
+    │       ├── AggregateOperator.java
+    │       ├── LimitOperator.java
+    │       ├── Accumulator.java
     │       └── DuplicateEliminationOperator.java
-    └── test/java/com/github/jinba1/blazedb/   # 20 test files
+    └── test/java/com/github/jinba1/blazedb/   # 24 test files
         ├── BlazeDBTest.java
         ├── ColumnExtractorTest.java
         ├── ConditionSplitterTest.java
@@ -69,12 +73,16 @@ java-query-engine/
         ├── ScanOperatorTest.java
         ├── SelectOperatorTest.java
         ├── SortOperatorTest.java
-        ├── SumOperatorTest.java
+        ├── AggregateFunctionTest.java
+        ├── AggregateOperatorTest.java
+        ├── AggregateLimitEndToEndTest.java
         ├── TupleComparatorTest.java
         ├── TupleTest.java
         ├── TestTuples.java
         ├── StringEndToEndTest.java
-        └── ValueTest.java
+        ├── ValueTest.java
+        ├── operator/AccumulatorTest.java
+        └── operator/LimitOperatorTest.java
 ```
 
 ## WHERE TO LOOK
@@ -94,7 +102,9 @@ java-query-engine/
 | `TupleComparator.java` | `com.github.jinba1.blazedb` | Comparator<Tuple> for multi-column lexicographic sorting by column indices. |
 | `SchemaTransformationType.java` | `com.github.jinba1.blazedb` | Enum marking the kind of schema transformation an operator performs. |
 | `Constants.java` | `com.github.jinba1.blazedb` | App constants: useQueryOptimization (boolean, default true), INTERMEDIATE_SCHEMA_PREFIX = "temp_", DATA_DIRECTORY_NAME = "data", SUM_FUNCTION_NAME = "SUM". |
-| `SampleQueryRunner.java` | `com.github.jinba1.blazedb` | Standalone main that runs all 12 sample queries against samples/db and diffs each output against samples/expected_output/, reporting pass/fail. |
+| `AggregateFunction.java` | `com.github.jinba1.blazedb` | Enum of supported aggregate functions: SUM, COUNT, AVG, MIN, MAX. `fromFunctionName(String)` maps SQL function names (case-insensitive) to enum values; returns null for unrecognised names. |
+| `AggregateCall.java` | `com.github.jinba1.blazedb` | Record holding one parsed aggregate call from the SELECT list: `function` (AggregateFunction), `argument` (JSqlParser Expression; null for COUNT(*)), and `schemaKey` (the output column name as registered). |
+| `SampleQueryRunner.java` | `com.github.jinba1.blazedb` | Standalone main that runs all 19 sample queries against samples/db and diffs each output against samples/expected_output/, reporting pass/fail. |
 | `Value.java` | `com.github.jinba1.blazedb` | Sealed interface for typed tuple values; permits IntValue, StringValue; extends Comparable<Value>; declares typeName(). |
 | `IntValue.java` | `com.github.jinba1.blazedb` | Record implementing Value; wraps int v(); compareTo orders numerically. |
 | `StringValue.java` | `com.github.jinba1.blazedb` | Record implementing Value; wraps String v(); compareTo orders lexicographically. |
@@ -106,7 +116,9 @@ java-query-engine/
 | `ProjectOperator.java` | `com.github.jinba1.blazedb.operator` | Unary; projects a subset of columns, rewriting the schema. |
 | `JoinOperator.java` | `com.github.jinba1.blazedb.operator` | Binary nested-loop join; has outerChild and child (inner); optional join condition; propagates merged schema. |
 | `SortOperator.java` | `com.github.jinba1.blazedb.operator` | Unary; materializes child tuples then sorts via TupleComparator by ORDER BY columns. |
-| `SumOperator.java` | `com.github.jinba1.blazedb.operator` | GROUP BY + SUM aggregation; groups by key columns, accumulates SUM, emits one tuple per group. |
+| `AggregateOperator.java` | `com.github.jinba1.blazedb.operator` | Blocking operator for GROUP BY + SUM/COUNT/AVG/MIN/MAX. Groups tuples by key columns, creates one Accumulator per aggregate call per group, then emits one output tuple per group. |
+| `Accumulator.java` | `com.github.jinba1.blazedb.operator` | Package-private interface for per-group, per-call aggregate state. `add(Value)` folds one row's argument; `result()` returns the final Value. Static factory `create(AggregateCall)` dispatches to IntSumAccumulator (SUM/AVG), CountAccumulator, or MinMaxAccumulator. |
+| `LimitOperator.java` | `com.github.jinba1.blazedb.operator` | Unary; emits at most `limit` tuples from its child then signals EOF. Placed at the top of the plan by the planner. |
 | `DuplicateEliminationOperator.java` | `com.github.jinba1.blazedb.operator` | DISTINCT; materializes child tuples into a LinkedHashSet to drop duplicates while preserving first-seen order. |
 
 ## CONVENTIONS
@@ -121,7 +133,7 @@ java-query-engine/
 ## COMMANDS
 
 ```bash
-# Run the full test suite (262 tests)
+# Run the full test suite (288 tests)
 ./mvnw test
 
 # Build the fat JAR explicitly
@@ -154,8 +166,8 @@ The README displays CI, Coverage (Codecov), and Dependencies badges at the top.
 
 ## NOTES
 
-- The test suite currently passes 262 tests with zero failures or errors: `Tests run: 262, Failures: 0, Errors: 0, Skipped: 0`.
+- The test suite currently passes 288 tests with zero failures or errors: `Tests run: 288, Failures: 0, Errors: 0, Skipped: 0`.
 - The benchmarking/tuple-counter infrastructure was introduced in commit `ef92ca1` ("feat: add query optimization benchmark suite with tuple counters"): `Operator` gained `protected long tupleCounter` with `getTupleCount()` / `resetTupleCount()`, and `QueryOptimizationBenchmarkTest` was added as one of the 20 test files.
-- `SampleQueryRunner.java` provides an automated 12-query diff runner: it runs all queries in `samples/input/` against `samples/db/` and diffs each result against `samples/expected_output/`, reporting pass/fail. There is no need to diff manually.
+- `SampleQueryRunner.java` provides an automated 19-query diff runner: it runs all queries in `samples/input/` against `samples/db/` and diffs each result against `samples/expected_output/`, reporting pass/fail. There is no need to diff manually.
 - A `.gitignore` exists at the repository root. It ignores `target/`, `*.iml`, `.DS_Store`, `*.class`, `.omo/`, and the test-resource output directories (`src/test/resources/test_integration_output/`, `src/test/resources/test_sample_output/`, `src/test/resources/test_integration_queries/`).
 - Query output includes a header row (column names, plain commas) followed by data rows (plain comma-separated, LF). Output is RFC 4180 and is round-trippable as input to this engine.
