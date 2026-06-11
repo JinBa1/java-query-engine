@@ -163,7 +163,11 @@ public class QueryPlanner {
             Expression joinCondition = findJoinCondition(joinExpressions, joinedTableNames, table);
 
             Operator rightOp = new ScanOperator(table.getName());
-            rootOp = new JoinOperator(rootOp, rightOp, joinCondition);
+            if (Constants.useHashJoin && HashJoinOperator.hasEquiConjunct(joinCondition)) {
+                rootOp = new HashJoinOperator(rootOp, rightOp, joinCondition);
+            } else {
+                rootOp = new JoinOperator(rootOp, rightOp, joinCondition);
+            }
 
             joinedTableNames.add(table.getName());
 

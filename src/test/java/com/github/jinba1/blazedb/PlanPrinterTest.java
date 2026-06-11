@@ -65,7 +65,7 @@ public class PlanPrinterTest {
                     "SELECT * FROM Sales, Reps WHERE Sales.region = Reps.region;");
             String text = PlanPrinter.print(root);
             assertEquals(
-                    "Join[Sales.region = Reps.region]\n"
+                    "HashJoin[Sales.region = Reps.region]\n"
                             + "  Scan[Sales]\n"
                             + "  Scan[Reps]\n",
                     text);

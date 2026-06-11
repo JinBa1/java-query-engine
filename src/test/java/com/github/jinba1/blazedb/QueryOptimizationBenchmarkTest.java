@@ -200,9 +200,12 @@ public class QueryOptimizationBenchmarkTest extends BlazeDBTest {
      */
     private long runQueryWithTupleCount(String queryName, String queryContent, boolean optimize) throws IOException {
         boolean savedOptimization = Constants.useQueryOptimization;
+        boolean savedHashJoin = Constants.useHashJoin;
         try {
-            // Set optimization flag
+            // Nested-loop join on both paths: this benchmark isolates the optimizer's
+            // effect on scan counts; join-algorithm gains are measured by the JMH suite
             Constants.useQueryOptimization = optimize;
+            Constants.useHashJoin = false;
 
             // Reset catalog
             DBCatalog.resetDBCatalog();
@@ -228,6 +231,7 @@ public class QueryOptimizationBenchmarkTest extends BlazeDBTest {
             return scanCount;
         } finally {
             Constants.useQueryOptimization = savedOptimization;
+            Constants.useHashJoin = savedHashJoin;
         }
     }
 

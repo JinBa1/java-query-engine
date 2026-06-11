@@ -12,6 +12,9 @@ public class Constants {
     /** Controls whether query plan optimization is enabled */
     public static boolean useQueryOptimization = true;
 
+    /** Controls whether the planner uses hash join for equi-join conditions */
+    public static boolean useHashJoin = true;
+
     /** Prefix used to identify intermediate schemas created during query processing */
     public static final String INTERMEDIATE_SCHEMA_PREFIX = "temp_";
 

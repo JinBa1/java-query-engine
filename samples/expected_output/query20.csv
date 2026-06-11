@@ -2,14 +2,14 @@
 Aggregate[group by: Student.B; calls: SUM(Student.c)]
   Project[Enrolled.A, Student.A, Student.B, Student.C, Student.D]
     Select[Student.D > 30]
-      Join[Student.A = Enrolled.A]
+      HashJoin[Student.A = Enrolled.A]
         Scan[Student]
         Scan[Enrolled]
 
 === Plan (optimized) ===
 Aggregate[group by: Student.B; calls: SUM(Student.c)]
   Project[Enrolled.A, Student.A, Student.B, Student.C, Student.D]
-    Join[Student.A = Enrolled.A]
+    HashJoin[Student.A = Enrolled.A]
       Select[Student.D > 30]
         Scan[Student]
       Project[Enrolled.A]
