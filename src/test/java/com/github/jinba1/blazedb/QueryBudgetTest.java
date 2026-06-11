@@ -30,6 +30,13 @@ public class QueryBudgetTest {
     }
 
     @Test
+    public void zeroTimeoutTripsOnTheFirstCharge() {
+        // deadline == now must count as expired, independent of clock resolution
+        QueryBudget budget = new QueryBudget(null, 0L);
+        assertThrows(QueryBudgetExceededException.class, budget::charge);
+    }
+
+    @Test
     public void clockStartsAtFirstChargeNotConstruction() throws InterruptedException {
         QueryBudget budget = new QueryBudget(null, 5_000L);
         Thread.sleep(20); // construction-to-first-charge delay must not count

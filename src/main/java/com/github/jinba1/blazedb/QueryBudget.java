@@ -43,7 +43,8 @@ public class QueryBudget {
                     "Tuple budget exceeded: limit " + maxTuples + ", query processed "
                             + processed + " tuples");
         }
-        if (timeoutMs != null && System.nanoTime() > deadlineNanos) {
+        // >= so an already-expired deadline (timeout 0) trips regardless of clock resolution
+        if (timeoutMs != null && System.nanoTime() >= deadlineNanos) {
             throw new QueryBudgetExceededException(
                     "Time budget exceeded: limit " + timeoutMs + " ms");
         }
