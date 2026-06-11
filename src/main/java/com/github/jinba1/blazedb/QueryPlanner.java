@@ -153,29 +153,29 @@ public class QueryPlanner {
         // Handle GROUP BY with SUM
         if (existGroupByOp(select)) {
             List<Column> groupByColumns = extractGroupByColumns(select);
-            List<Expression> sumExpressions = extractSumExpressions(select);
+            List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
             List<Column> outputColumns = extractNonAggregateColumns(select);
 
-            Set<Column> requiredColumns = getRequiredColumnsForSum(groupByColumns, sumExpressions, select);
+            Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
 
             // Project only required columns before aggregation
             Operator childOp = rootOp;
             rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
 
-            // Add the SUM operator
-            rootOp = new SumOperator(rootOp, groupByColumns, sumExpressions, outputColumns);
+            // Add the aggregate operator
+            rootOp = new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
         }
         // Handle SUM without GROUP BY
         else if (existSumAggregate(select)) {
             List<Column> groupByColumns = new ArrayList<>(); // Empty for no grouping
-            List<Expression> sumExpressions = extractSumExpressions(select);
+            List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
             List<Column> outputColumns = new ArrayList<>(); // Empty for no grouping
 
-            Set<Column> requiredColumns = getRequiredColumnsForSum(groupByColumns, sumExpressions, select);
+            Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
             Operator childOp = rootOp;
             rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
 
-            rootOp = new SumOperator(rootOp, groupByColumns, sumExpressions, outputColumns);
+            rootOp = new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
         }
 
         return rootOp;
@@ -271,25 +271,50 @@ public class QueryPlanner {
     }
 
     /**
-     * Extracts SUM expressions from a query.
+     * Extracts aggregate calls (SUM/COUNT/AVG/MIN/MAX) from the SELECT list, in order.
+     * Computes each call's schema key in the engine's established format:
+     * "SUM(student.b)" for column arguments, "SUM(0)" (call index) for expression
+     * arguments, "COUNT(*)" for the star form. Keys are lowercased only at output.
      * @param select The SELECT statement to extract from
-     * @return A list of Expression objects representing SUM aggregates
+     * @return The aggregate calls in SELECT-list order
      */
-    private static List<Expression> extractSumExpressions(Select select) {
-        List<Expression> sumExpressions = new ArrayList<>();
-        List<SelectItem<?>> selectItems = select.getPlainSelect().getSelectItems();
-
-        for (SelectItem<?> item : selectItems) {
+    private static List<AggregateCall> extractAggregateCalls(Select select) {
+        List<AggregateCall> calls = new ArrayList<>();
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
             Expression expr = item.getExpression();
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    sumExpressions.add(function);
-                }
+            if (!(expr instanceof Function function)) {
+                continue;
             }
-        }
+            AggregateFunction aggregateFunction = AggregateFunction.fromFunctionName(function.getName());
+            if (aggregateFunction == null) {
+                continue;
+            }
 
-        return sumExpressions;
+            Expression argument;
+            if (function.isAllColumns() || function.getParameters() == null
+                    || function.getParameters().isEmpty()) {
+                if (aggregateFunction != AggregateFunction.COUNT) {
+                    throw new QueryExecutionException(
+                            function.getName() + "(*) is not supported; only COUNT(*) may use '*'");
+                }
+                argument = null;
+            } else {
+                argument = (Expression) function.getParameters().get(0);
+            }
+
+            String schemaKey;
+            if (argument == null) {
+                schemaKey = function.getName() + "(*)";
+            } else if (argument instanceof Column column) {
+                schemaKey = function.getName() + "(" + column.getTable().getName() + "."
+                        + column.getColumnName().toLowerCase() + ")";
+            } else {
+                schemaKey = function.getName() + "(" + calls.size() + ")";
+            }
+
+            calls.add(new AggregateCall(aggregateFunction, argument, schemaKey));
+        }
+        return calls;
     }
 
     /**
@@ -520,36 +545,26 @@ public class QueryPlanner {
     }
 
     /**
-     * Determines which columns are required for SUM aggregation.
-     * Includes group-by columns, columns in SUM expressions, and columns from WHERE clause.
-     * @param groupByColumns Columns in the GROUP BY clause
-     * @param sumExpressions SUM aggregate expressions
-     * @param select The SELECT statement being processed
-     * @return A set of all required columns
+     * Determines which columns must survive into the aggregation input:
+     * group-by columns, columns inside aggregate arguments (COUNT(*) contributes none),
+     * and columns from the WHERE clause.
      */
-    private static Set<Column> getRequiredColumnsForSum(
+    private static Set<Column> getRequiredColumnsForAggregation(
             List<Column> groupByColumns,
-            List<Expression> sumExpressions,
+            List<AggregateCall> aggregateCalls,
             Select select) {
 
         Set<Column> requiredColumns = new HashSet<>(groupByColumns);
 
-        // Add columns used in SUM expressions
-        for (Expression expr : sumExpressions) {
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    Expression innerExpr = (Expression) function.getParameters().get(0);
-
-                    // Extract columns from the SUM expression
-                    ColumnExtractor extractor = new ColumnExtractor();
-                    innerExpr.accept(extractor);
-                    requiredColumns.addAll(extractor.getColumns());
-                }
+        for (AggregateCall call : aggregateCalls) {
+            if (call.argument() == null) {
+                continue; // COUNT(*) needs no input columns
             }
+            ColumnExtractor extractor = new ColumnExtractor();
+            call.argument().accept(extractor);
+            requiredColumns.addAll(extractor.getColumns());
         }
 
-        // Add columns from the WHERE clause (for join/selection conditions)
         Expression whereExpr = select.getPlainSelect().getWhere();
         if (whereExpr != null) {
             ColumnExtractor extractor = new ColumnExtractor();

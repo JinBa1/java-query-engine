@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
-import com.github.jinba1.blazedb.operator.SumOperator;
+import com.github.jinba1.blazedb.operator.AggregateOperator;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
@@ -27,7 +27,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class SumOperatorTest {
+/**
+ * Tests for {@link AggregateOperator}, covering GROUP BY aggregation with SUM.
+ */
+public class AggregateOperatorTest {
 
     @TempDir
     Path tempDb;
@@ -36,6 +39,28 @@ public class SumOperatorTest {
         Path data = tempDb.resolve("data");
         Files.createDirectories(data);
         Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
+
+    /**
+     * Converts SUM Function expressions (as the old tests build them) into AggregateCalls,
+     * replicating the planner's schema-key format.
+     */
+    private static List<AggregateCall> calls(List<Expression> aggregateExpressions) {
+        List<AggregateCall> result = new ArrayList<>();
+        for (Expression expr : aggregateExpressions) {
+            Function function = (Function) expr;
+            Expression argument = (Expression) function.getParameters().get(0);
+            String schemaKey;
+            if (argument instanceof Column column) {
+                schemaKey = function.getName() + "(" + column.getTable().getName() + "."
+                        + column.getColumnName().toLowerCase() + ")";
+            } else {
+                schemaKey = function.getName() + "(" + result.size() + ")";
+            }
+            result.add(new AggregateCall(
+                    AggregateFunction.fromFunctionName(function.getName()), argument, schemaKey));
+        }
+        return result;
     }
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
@@ -110,7 +135,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();
@@ -186,7 +211,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();
@@ -260,7 +285,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();
@@ -321,7 +346,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();
@@ -381,7 +406,7 @@ public class SumOperatorTest {
         // No output columns (no group by)
         List<Column> outputColumns = new ArrayList<>();
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get the result
         Tuple tuple = sumOp.getNextTuple();
@@ -428,7 +453,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Should not return any tuples
         assertNull(sumOp.getNextTuple(), "Empty table should produce no results");
@@ -465,7 +490,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Count results first time
         int firstRunCount = 0;
@@ -521,7 +546,7 @@ public class SumOperatorTest {
         // Output columns: Orders.customer
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         Set<String> resultStrings = new HashSet<>();
         Tuple tuple;
@@ -560,7 +585,7 @@ public class SumOperatorTest {
 
         List<Column> outputColumns = new ArrayList<>();
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         QueryExecutionException e = assertThrows(QueryExecutionException.class,
                 () -> { while (sumOp.getNextTuple() != null) { /* drain */ } });
@@ -613,7 +638,7 @@ public class SumOperatorTest {
         // Output columns same as group by columns
         List<Column> outputColumns = new ArrayList<>(groupByColumns);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();
@@ -694,7 +719,7 @@ public class SumOperatorTest {
         List<Column> outputColumns = new ArrayList<>();
         outputColumns.add(categoryColumn);
 
-        SumOperator sumOp = new SumOperator(scanOp, groupByColumns, sumExpressions, outputColumns);
+        AggregateOperator sumOp = new AggregateOperator(scanOp, groupByColumns, calls(sumExpressions), outputColumns);
 
         // Get all result tuples
         List<Tuple> resultTuples = new ArrayList<>();

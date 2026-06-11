@@ -112,8 +112,8 @@ public class QueryPlanOptimizer {
             return false;
         }
 
-        // If the child is a SumOperator, never consider the projection trivial
-        if (childOp instanceof SumOperator) {
+        // If the child is an AggregateOperator, never consider the projection trivial
+        if (childOp instanceof AggregateOperator) {
             return false;
         }
 
@@ -580,7 +580,7 @@ public class QueryPlanOptimizer {
         }
         else if (op instanceof DuplicateEliminationOperator ||
                 op instanceof SortOperator ||
-                op instanceof SumOperator) {
+                op instanceof AggregateOperator) {
             return pushProjectionThroughPassthroughOp(op, requiredColumns);
         }
 
