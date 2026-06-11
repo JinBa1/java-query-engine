@@ -101,7 +101,7 @@ java-query-engine/
 | `Tuple.java` | `com.github.jinba1.blazedb` | Row of typed values: wraps List<Value>; getAttribute(i) returns Value, toString() (comma-space separated), equals/hashCode. |
 | `TupleComparator.java` | `com.github.jinba1.blazedb` | Comparator<Tuple> for multi-column lexicographic sorting by column indices. |
 | `SchemaTransformationType.java` | `com.github.jinba1.blazedb` | Enum marking the kind of schema transformation an operator performs. |
-| `Constants.java` | `com.github.jinba1.blazedb` | App constants: useQueryOptimization (boolean, default true), INTERMEDIATE_SCHEMA_PREFIX = "temp_", DATA_DIRECTORY_NAME = "data", SUM_FUNCTION_NAME = "SUM". |
+| `Constants.java` | `com.github.jinba1.blazedb` | App constants: useQueryOptimization (boolean, default true), INTERMEDIATE_SCHEMA_PREFIX = "temp_", DATA_DIRECTORY_NAME = "data". |
 | `AggregateFunction.java` | `com.github.jinba1.blazedb` | Enum of supported aggregate functions: SUM, COUNT, AVG, MIN, MAX. `fromFunctionName(String)` maps SQL function names (case-insensitive) to enum values; returns null for unrecognised names. |
 | `AggregateCall.java` | `com.github.jinba1.blazedb` | Record holding one parsed aggregate call from the SELECT list: `function` (AggregateFunction), `argument` (JSqlParser Expression; null for COUNT(*)), and `schemaKey` (the output column name as registered). |
 | `SampleQueryRunner.java` | `com.github.jinba1.blazedb` | Standalone main that runs all 19 sample queries against samples/db and diffs each output against samples/expected_output/, reporting pass/fail. |

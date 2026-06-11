@@ -81,8 +81,6 @@ public class AggregateOperator extends Operator {
         groupByIndices.clear();
         outputIndices.clear();
 
-        // Debug output to verify column resolution
-
         // Resolve group by column indices
         this.groupByIndices = resolveColumnIndices(groupByColumns, schemaId, groupByIndices);
         this.outputIndices = resolveColumnIndices(outputColumns, schemaId, outputIndices);
@@ -149,7 +147,7 @@ public class AggregateOperator extends Operator {
      * For each tuple read from the child:
      * 1. Extract group key values (if any)
      * 2. Get or create aggregate values for this group
-     * 3. Evaluate each SUM expression and add to the appropriate aggregate
+     * 3. Evaluate each aggregate call's argument and fold it into the group's accumulators
      * After processing all tuples, an iterator is initialized to return the results.
      */
     private void processChildTuples() {
@@ -210,7 +208,7 @@ public class AggregateOperator extends Operator {
      * aggregate function names to appropriate indices.
      * The schema includes:
      * 1. Group by columns selected for output
-     * 2. SUM aggregates with descriptive names
+     * 2. Aggregate calls keyed by their precomputed schema keys
      * Transformation details are recorded to track how the schema was derived,
      * which helps with column resolution in parent operators.
      */

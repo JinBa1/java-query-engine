@@ -28,7 +28,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Tests for {@link AggregateOperator}, covering GROUP BY aggregation with SUM.
+ * Tests for {@link AggregateOperator}, covering GROUP BY aggregation through the legacy
+ * SUM cases. COUNT/AVG/MIN/MAX behavior is covered by AccumulatorTest and
+ * AggregateLimitEndToEndTest.
  */
 public class AggregateOperatorTest {
 

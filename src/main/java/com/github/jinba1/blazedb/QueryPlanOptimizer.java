@@ -743,9 +743,9 @@ public class QueryPlanOptimizer {
     }
 
     /**
-     * Pushes projection through passthrough operators like DuplicateElimination, Sort, and Sum.
-     * These operators typically need all colum
-     * ns from their input for proper operation.
+     * Pushes projection through passthrough operators like DuplicateElimination, Sort,
+     * and Aggregate. These operators typically need all columns from their input for
+     * proper operation.
      * @param op The operator to process
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree
