@@ -358,6 +358,12 @@ public class DBCatalog {
                 names[idx] = name;
             }
         }
+        for (int i = 0; i < width; i++) {
+            if (names[i] == null) {
+                throw new QueryExecutionException(
+                        "Schema '" + schemaId + "' has no column name for index " + i);
+            }
+        }
         return Arrays.asList(names);
     }
 

@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
 public class JoinOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String STUDENTS_TABLE = "Students";
     private static final String COURSES_TABLE = "Courses";
@@ -34,14 +33,6 @@ public class JoinOperatorTest {
     public void setUp() throws IOException {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
-
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(STUDENTS_TABLE + " sid name age gpa\n");
-            writer.write(COURSES_TABLE + " cid title credits department\n");
-            writer.write(ENROLLED_TABLE + " sid cid grade\n");
-            writer.write(EMPTY_TABLE + " id name\n");
-        }
 
         // Create Students table data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + STUDENTS_TABLE + ".csv"))) {
@@ -88,7 +79,6 @@ public class JoinOperatorTest {
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + COURSES_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + ENROLLED_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + EMPTY_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }

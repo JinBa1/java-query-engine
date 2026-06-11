@@ -39,7 +39,6 @@ public class SumOperatorTest {
     }
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String SALES_TABLE = "Sales";
     private static final String EMPTY_TABLE = "EmptySales";
@@ -48,12 +47,6 @@ public class SumOperatorTest {
     public void setUp() throws IOException {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
-
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(SALES_TABLE + " product_id category qty price\n");
-            writer.write(EMPTY_TABLE + " product_id category qty price\n");
-        }
 
         // Create test data file with sales data - this is the base data for most tests
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + SALES_TABLE + ".csv"))) {
@@ -81,7 +74,6 @@ public class SumOperatorTest {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + SALES_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + EMPTY_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }

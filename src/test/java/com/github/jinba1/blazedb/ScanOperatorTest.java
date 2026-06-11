@@ -3,7 +3,6 @@ package com.github.jinba1.blazedb;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,7 +33,6 @@ public class ScanOperatorTest {
     }
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "TestTable";
     private static final String EMPTY_TABLE = "EmptyTable";
@@ -43,12 +41,6 @@ public class ScanOperatorTest {
     public void setUp() throws IOException {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
-
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " A B C D\n");
-            writer.write(EMPTY_TABLE + " X Y Z\n");
-        }
 
         // Create test data file with some sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
@@ -73,7 +65,6 @@ public class ScanOperatorTest {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + EMPTY_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }

@@ -81,7 +81,7 @@ java-query-engine/
 
 | File | Package | Notes |
 |------|---------|-------|
-| `BlazeDB.java` | `com.github.jinba1.blazedb` | Entry point. `public static void main(String[] args)` takes db-dir, input SQL file, output CSV path; parses via QueryPlanner then executes, writing tuples to the output file. |
+| `BlazeDB.java` | `com.github.jinba1.blazedb` | Entry point. `public static void main(String[] args)` takes db-dir, input SQL file, output CSV path; parses via QueryPlanner then executes, writing a header row followed by tuple rows via commons-csv RFC 4180 (LF line endings) to the output file. |
 | `QueryPlanner.java` | `com.github.jinba1.blazedb` | Translates a SQL file into an executable operator tree (parseStatement); builds the scan/join/select/project/group-by-SUM/sort/distinct pipeline. |
 | `QueryPlanOptimizer.java` | `com.github.jinba1.blazedb` | Optimization passes: selection pushdown, trivial project/select removal, consecutive-select merging, projection pushdown. Toggled by Constants.useQueryOptimization. |
 | `DBCatalog.java` | `com.github.jinba1.blazedb` | Mutable singleton: CSV-header table discovery + INT/STRING type inference at init. Table-to-path map (dbLocations), table schemas (dbSchemata), column types (dbColumnTypes). initDBCatalog(dir) / resetDBCatalog(); getColumnTypes(), getOrderedColumnNames(). No schema.txt. |

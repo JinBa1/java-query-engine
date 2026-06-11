@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
@@ -22,7 +21,6 @@ import org.junit.jupiter.api.Test;
 public class SelectOperatorTest {
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
-    private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
@@ -30,11 +28,6 @@ public class SelectOperatorTest {
     public void setUp() throws IOException {
         // Create test database directory structure
         Files.createDirectories(Paths.get(DATA_DIR));
-
-        // Create schema file
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(SCHEMA_FILE))) {
-            writer.write(TEST_TABLE + " sid name age gpa\n");
-        }
 
         // Create test data file with varied sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
@@ -55,7 +48,6 @@ public class SelectOperatorTest {
     public void tearDown() throws IOException {
         // Clean up test files
         Files.deleteIfExists(Paths.get(DATA_DIR + "/" + TEST_TABLE + ".csv"));
-        Files.deleteIfExists(Paths.get(SCHEMA_FILE));
         Files.deleteIfExists(Paths.get(DATA_DIR));
         Files.deleteIfExists(Paths.get(TEST_DB_DIR));
     }
