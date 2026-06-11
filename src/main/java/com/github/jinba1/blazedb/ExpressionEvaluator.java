@@ -29,7 +29,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
 
     private Tuple currentTuple;
     private final Stack<Boolean> resultStack;
-    private final Stack<Integer> valueStack;
+    private final Stack<Value> valueStack;
 
     private final String schemaId;
 
@@ -78,7 +78,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
      * @return The numeric result of evaluating the expression
      * @throws RuntimeException If the expression evaluation does not produce a value
      */
-    public Integer evaluateValue(Expression expression, Tuple tuple) {
+    public Value evaluateValue(Expression expression, Tuple tuple) {
         // Note: logical expressions should not be passed to this method; guard if needed
         this.currentTuple = tuple;
         this.resultStack.clear();
@@ -215,7 +215,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
      */
     @Override
     public void visit(LongValue longValue) {
-        valueStack.push(Long.valueOf(longValue.getValue()).intValue());
+        valueStack.push(new IntValue((int) longValue.getValue()));
     }
 
     /**
@@ -230,8 +230,14 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         expression.getRightExpression().accept(this);
 
         // reverse order for LIFO
-        int rightVal = valueStack.pop();
-        int leftVal = valueStack.pop();
+        Value rightV = valueStack.pop();
+        Value leftV = valueStack.pop();
+        if (!(rightV instanceof IntValue r) || !(leftV instanceof IntValue l)) {
+            throw new QueryExecutionException("Type mismatch: expected int operands, got "
+                    + leftV.typeName() + " and " + rightV.typeName());
+        }
+        int rightVal = r.v();
+        int leftVal = l.v();
 
         if (expression instanceof EqualsTo) {
             boolean result = leftVal == rightVal;
@@ -254,7 +260,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         } else if (expression instanceof Multiplication) {
             // For multiplication, we calculate the product and push it to valueStack
             // (not resultStack since it's not a boolean result)
-            valueStack.push(leftVal * rightVal);
+            valueStack.push(new IntValue(leftVal * rightVal));
         } else {
             throw new UnsupportedOperationException("Unsupported binary expression: " + expression.getClass().getName());
         }

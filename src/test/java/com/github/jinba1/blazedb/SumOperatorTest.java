@@ -118,8 +118,8 @@ public class SumOperatorTest {
 
         // Verify the sum of quantities for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int sumQty = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -194,9 +194,9 @@ public class SumOperatorTest {
 
         // Verify the sums for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int sumQty = t.getAttribute(1);
-            int sumPrice = t.getAttribute(2);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
+            int sumPrice = ((IntValue) t.getAttribute(2)).v();
 
             switch (category) {
                 case 1:
@@ -268,8 +268,8 @@ public class SumOperatorTest {
 
         // Verify the total revenue for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int totalRevenue = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int totalRevenue = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -329,8 +329,8 @@ public class SumOperatorTest {
 
         // Verify the count for each category
         for (Tuple t : resultTuples) {
-            int category = t.getAttribute(0);
-            int count = t.getAttribute(1);
+            int category = ((IntValue) t.getAttribute(0)).v();
+            int count = ((IntValue) t.getAttribute(1)).v();
 
             switch (category) {
                 case 1:
@@ -385,7 +385,7 @@ public class SumOperatorTest {
         assertEquals(1, tuple.getTuple().size(), "Result tuple should have one attribute");
 
         // Sum of all qty values: 10 + 20 + 15 + 5 + 30 = 80
-        assertEquals(80, tuple.getAttribute(0).intValue(), "Total sum(qty) should be 80");
+        assertEquals(80, ((IntValue) tuple.getAttribute(0)).v(), "Total sum(qty) should be 80");
 
         // No more results
         assertNull(sumOp.getNextTuple(), "Should have no more result tuples");
@@ -541,9 +541,9 @@ public class SumOperatorTest {
 
         // Verify the sums for each group
         for (Tuple t : resultTuples) {
-            int productId = t.getAttribute(0);
-            int category = t.getAttribute(1);
-            int sumQty = t.getAttribute(2);
+            int productId = ((IntValue) t.getAttribute(0)).v();
+            int category = ((IntValue) t.getAttribute(1)).v();
+            int sumQty = ((IntValue) t.getAttribute(2)).v();
 
             if (productId == 1 && category == 1) {
                 assertEquals(10, sumQty, "Product 1, Category 1 should have sum(qty)=10");
@@ -624,11 +624,11 @@ public class SumOperatorTest {
             assertEquals(2, t.getTuple().size(), "Result tuple should have 2 attributes");
 
             // First attribute should be category (1 or 2)
-            int category = t.getAttribute(0);
+            int category = ((IntValue) t.getAttribute(0)).v();
             assertTrue(category == 1 || category == 2, "Category should be 1 or 2");
 
             // Second attribute should be sum(qty) for that specific product_id + category group
-            int sumQty = t.getAttribute(1);
+            int sumQty = ((IntValue) t.getAttribute(1)).v();
             assertTrue(sumQty == 10 || sumQty == 15 || sumQty == 20 || sumQty == 5 || sumQty == 30, "Sum(qty) should be one of the expected values");
         }
     }

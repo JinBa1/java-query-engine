@@ -94,8 +94,8 @@ public class ProjectOperatorTest {
         }
 
         // Check some values
-        assertEquals(Integer.valueOf(1), projectedTuples.get(0).getAttribute(0), "First tuple should have sid=1");
-        assertEquals(Integer.valueOf(5), projectedTuples.get(4).getAttribute(0), "Last tuple should have sid=5");
+        assertEquals(new IntValue(1), projectedTuples.get(0).getAttribute(0), "First tuple should have sid=1");
+        assertEquals(new IntValue(5), projectedTuples.get(4).getAttribute(0), "Last tuple should have sid=5");
 
         scanOp.close();
     }
@@ -128,8 +128,8 @@ public class ProjectOperatorTest {
 
         // Check the structure and values of the first projected tuple
         assertEquals(2, tuple.getTuple().size(), "Projected tuple should have 2 attributes");
-        assertEquals(Integer.valueOf(1), tuple.getAttribute(0), "First attribute should be sid=1");
-        assertEquals(Integer.valueOf(3), tuple.getAttribute(1), "Second attribute should be gpa=3");
+        assertEquals(new IntValue(1), tuple.getAttribute(0), "First attribute should be sid=1");
+        assertEquals(new IntValue(3), tuple.getAttribute(1), "Second attribute should be gpa=3");
 
         // Read all tuples
         int count = 1; // Already read one
@@ -169,8 +169,8 @@ public class ProjectOperatorTest {
 
         // Check the first projected tuple - order should be reversed from the previous test
         assertEquals(2, tuple.getTuple().size(), "Projected tuple should have 2 attributes");
-        assertEquals(Integer.valueOf(3), tuple.getAttribute(0), "First attribute should be gpa=3");
-        assertEquals(Integer.valueOf(1), tuple.getAttribute(1), "Second attribute should be sid=1");
+        assertEquals(new IntValue(3), tuple.getAttribute(0), "First attribute should be gpa=3");
+        assertEquals(new IntValue(1), tuple.getAttribute(1), "Second attribute should be sid=1");
 
         scanOp.close();
     }
@@ -197,7 +197,7 @@ public class ProjectOperatorTest {
             ProjectOperator projectOp = new ProjectOperator(selectOp, projectedColumns);
 
             // Should return two projected tuples (for students 2 and 4)
-            List<Integer> projectedSids = new ArrayList<>();
+            List<Value> projectedSids = new ArrayList<>();
             Tuple tuple;
 
             while ((tuple = projectOp.getNextTuple()) != null) {
@@ -206,8 +206,8 @@ public class ProjectOperatorTest {
             }
 
             assertEquals(2, projectedSids.size(), "Should have 2 projected tuples after selection");
-            assertTrue(projectedSids.contains(2), "Should contain student with sid=2");
-            assertTrue(projectedSids.contains(4), "Should contain student with sid=4");
+            assertTrue(projectedSids.contains(new IntValue(2)), "Should contain student with sid=2");
+            assertTrue(projectedSids.contains(new IntValue(4)), "Should contain student with sid=4");
 
         } catch (Exception e) {
             fail("Exception during test: " + e.getMessage());
@@ -243,8 +243,8 @@ public class ProjectOperatorTest {
 
         // Check the structure and values - should have sid twice
         assertEquals(2, tuple.getTuple().size(), "Projected tuple should have 2 attributes");
-        assertEquals(Integer.valueOf(1), tuple.getAttribute(0), "First attribute should be sid=1");
-        assertEquals(Integer.valueOf(1), tuple.getAttribute(1), "Second attribute should also be sid=1");
+        assertEquals(new IntValue(1), tuple.getAttribute(0), "First attribute should be sid=1");
+        assertEquals(new IntValue(1), tuple.getAttribute(1), "Second attribute should also be sid=1");
 
         scanOp.close();
     }
@@ -355,10 +355,10 @@ public class ProjectOperatorTest {
 
         // Check it has all attributes
         assertEquals(4, tuple.getTuple().size(), "Projected tuple should have all 4 attributes");
-        assertEquals(Integer.valueOf(1), tuple.getAttribute(0), "First attribute should be sid=1");
-        assertEquals(Integer.valueOf(25), tuple.getAttribute(1), "Second attribute should be name=25");
-        assertEquals(Integer.valueOf(85), tuple.getAttribute(2), "Third attribute should be age=85");
-        assertEquals(Integer.valueOf(3), tuple.getAttribute(3), "Fourth attribute should be gpa=3");
+        assertEquals(new IntValue(1), tuple.getAttribute(0), "First attribute should be sid=1");
+        assertEquals(new IntValue(25), tuple.getAttribute(1), "Second attribute should be name=25");
+        assertEquals(new IntValue(85), tuple.getAttribute(2), "Third attribute should be age=85");
+        assertEquals(new IntValue(3), tuple.getAttribute(3), "Fourth attribute should be gpa=3");
 
         scanOp.close();
     }

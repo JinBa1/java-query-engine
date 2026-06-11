@@ -4,6 +4,7 @@ import com.github.jinba1.blazedb.DBCatalog;
 import com.github.jinba1.blazedb.ExpressionEvaluator;
 import com.github.jinba1.blazedb.SchemaTransformationType;
 import com.github.jinba1.blazedb.Tuple;
+import com.github.jinba1.blazedb.Value;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.schema.Column;
 
@@ -50,7 +51,7 @@ public class ProjectOperator extends Operator {
             return null;
         }
 
-        ArrayList<Integer> projectedColumns = new ArrayList<>(); // construct new tuple from this filtered list.
+        ArrayList<Value> projectedColumns = new ArrayList<>(); // construct new tuple from this filtered list.
         for (Integer index : resolvedIndices) {
             projectedColumns.add(nextTuple.getAttribute(index));
         }

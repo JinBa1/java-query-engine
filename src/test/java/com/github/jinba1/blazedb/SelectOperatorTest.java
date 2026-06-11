@@ -69,7 +69,7 @@ public class SelectOperatorTest {
         // Should return just one tuple with sid=3
         Tuple tuple = selectOp.getNextTuple();
         assertNotNull(tuple, "Should return a tuple");
-        assertEquals(Integer.valueOf(3), tuple.getAttribute(0), "Tuple should have sid=3");
+        assertEquals(new IntValue(3), tuple.getAttribute(0), "Tuple should have sid=3");
 
         // No more tuples should be returned
         assertNull(selectOp.getNextTuple(), "Should have no more matching tuples");
@@ -85,8 +85,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return three tuples with age < 30 (students 2, 3, and 4)
-        List<Integer> expectedSids = Arrays.asList(2, 3, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(2, 3, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -94,7 +94,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(3, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -109,8 +109,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return two tuples (students 2 and 4)
-        List<Integer> expectedSids = Arrays.asList(2, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(2, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -118,7 +118,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(2, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -148,8 +148,8 @@ public class SelectOperatorTest {
         // Only student with sid=4 has matching gpa=3
         Tuple tuple = selectOp.getNextTuple();
         assertNotNull(tuple, "Should return another tuple");
-        assertEquals(Integer.valueOf(4), tuple.getAttribute(0), "Tuple should have sid=4");
-        assertEquals(Integer.valueOf(4), tuple.getAttribute(3), "Tuple should have gpa=4");
+        assertEquals(new IntValue(4), tuple.getAttribute(0), "Tuple should have sid=4");
+        assertEquals(new IntValue(4), tuple.getAttribute(3), "Tuple should have gpa=4");
 
         // No more tuples should be returned
         assertNull(selectOp.getNextTuple(), "Should have no more matching tuples");
@@ -166,8 +166,8 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Should return students 1, 2, and 4
-        List<Integer> expectedSids = Arrays.asList(1, 2, 4);
-        List<Integer> actualSids = new ArrayList<>();
+        List<Value> expectedSids = TestTuples.ints(1, 2, 4);
+        List<Value> actualSids = new ArrayList<>();
 
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
@@ -175,7 +175,7 @@ public class SelectOperatorTest {
         }
 
         assertEquals(3, actualSids.size(), "Should return correct number of tuples");
-        for (Integer sid : expectedSids) {
+        for (Value sid : expectedSids) {
             assertTrue(actualSids.contains(sid), "Should contain student with sid=" + sid);
         }
 
@@ -190,7 +190,7 @@ public class SelectOperatorTest {
         SelectOperator selectOp = new SelectOperator(scanOp, expr);
 
         // Get all matching tuples first time
-        List<Integer> firstRunSids = new ArrayList<>();
+        List<Value> firstRunSids = new ArrayList<>();
         Tuple tuple;
         while ((tuple = selectOp.getNextTuple()) != null) {
             firstRunSids.add(tuple.getAttribute(0));
@@ -201,7 +201,7 @@ public class SelectOperatorTest {
         // Reset and get tuples again
         selectOp.reset();
 
-        List<Integer> secondRunSids = new ArrayList<>();
+        List<Value> secondRunSids = new ArrayList<>();
         while ((tuple = selectOp.getNextTuple()) != null) {
             secondRunSids.add(tuple.getAttribute(0));
         }

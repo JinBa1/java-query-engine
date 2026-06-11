@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import com.github.jinba1.blazedb.operator.ScanOperator;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,7 +91,7 @@ public class ScanOperatorTest {
         Tuple tuple = scanOp.getNextTuple();
         assertNotNull(tuple, "First tuple should not be null");
 
-        ArrayList<Integer> expectedValues = new ArrayList<>(Arrays.asList(1, 10, 100, 1000));
+        List<Value> expectedValues = TestTuples.ints(1, 10, 100, 1000);
         for (int i = 0; i < expectedValues.size(); i++) {
             assertEquals(expectedValues.get(i), tuple.getAttribute(i), "Tuple value at index " + i + " should match");
         }

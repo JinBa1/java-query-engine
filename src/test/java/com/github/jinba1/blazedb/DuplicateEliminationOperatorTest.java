@@ -81,9 +81,9 @@ public class DuplicateEliminationOperatorTest {
         assertEquals(4, distinctTuples.size(), "Should return 4 distinct tuples");
 
         // Verify the distinct tuples have the expected values
-        List<Integer> expectedFirstValues = Arrays.asList(1, 2, 3, 4);
+        List<Value> expectedFirstValues = TestTuples.ints(1, 2, 3, 4);
         for (Tuple t : distinctTuples) {
-            Integer firstValue = t.getAttribute(0);
+            Value firstValue = t.getAttribute(0);
             assertTrue(expectedFirstValues.contains(firstValue), "Distinct tuples should contain value " + firstValue);
         }
     }
@@ -123,9 +123,9 @@ public class DuplicateEliminationOperatorTest {
         }
 
         // Verify the distinct values of A
-        List<Integer> expectedValues = new ArrayList<>(Arrays.asList(1, 2, 3, 4));
+        List<Value> expectedValues = new ArrayList<>(TestTuples.ints(1, 2, 3, 4));
         for (Tuple t : distinctTuples) {
-            Integer value = t.getAttribute(0);
+            Value value = t.getAttribute(0);
             assertTrue(expectedValues.contains(value), "Distinct values should include " + value);
 
             // Remove the value to ensure no duplicates in our results

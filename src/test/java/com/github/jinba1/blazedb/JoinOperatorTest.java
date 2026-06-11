@@ -145,8 +145,8 @@ public class JoinOperatorTest {
         // Verify each tuple meets all conditions
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(0), t.getAttribute(4), "Student sid should match Enrolled sid");
-            assertTrue(t.getAttribute(3) > 2, "Student gpa should be > 2");
-            assertTrue(t.getAttribute(6) > 80, "Enrolled grade should be > 80");
+            assertTrue(((IntValue) t.getAttribute(3)).v() > 2, "Student gpa should be > 2");
+            assertTrue(((IntValue) t.getAttribute(6)).v() > 80, "Enrolled grade should be > 80");
         }
     }
 
@@ -222,7 +222,7 @@ public class JoinOperatorTest {
 
         // Verify join condition for all tuples
         for (Tuple t : joinedTuples) {
-            assertTrue(t.getAttribute(3) > t.getAttribute(6), "Student gpa should be > Course credits");
+            assertTrue(((IntValue) t.getAttribute(3)).v() > ((IntValue) t.getAttribute(6)).v(), "Student gpa should be > Course credits");
         }
     }
 
@@ -309,7 +309,7 @@ public class JoinOperatorTest {
         // Verify conditions are met for all tuples
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(0), t.getAttribute(4), "Student sid should match Enrolled sid");
-            assertTrue(t.getAttribute(3) >= 3, "Student gpa should be >= 3");
+            assertTrue(((IntValue) t.getAttribute(3)).v() >= 3, "Student gpa should be >= 3");
         }
     }
 
@@ -334,7 +334,7 @@ public class JoinOperatorTest {
         // Verify each tuple meets both join conditions
         for (Tuple t : joinedTuples) {
             assertEquals(t.getAttribute(2), t.getAttribute(7), "Student age should match Course department");
-            assertTrue(t.getAttribute(3) < t.getAttribute(6), "Student gpa should be < Course credits");
+            assertTrue(((IntValue) t.getAttribute(3)).v() < ((IntValue) t.getAttribute(6)).v(), "Student gpa should be < Course credits");
         }
     }
 

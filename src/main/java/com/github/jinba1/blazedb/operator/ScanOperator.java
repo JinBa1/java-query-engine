@@ -2,6 +2,8 @@ package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.Tuple;
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.Value;
+import com.github.jinba1.blazedb.IntValue;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -64,9 +66,9 @@ public class ScanOperator extends Operator {
             }
 
             String[] values = line.split(",\\s*"); // parse the line
-            ArrayList<Integer> attributes = new ArrayList<>();
+            ArrayList<Value> attributes = new ArrayList<>();
             for (String value : values) {
-                attributes.add(Integer.parseInt(value.trim()));
+                attributes.add(new IntValue(Integer.parseInt(value.trim())));
             }
 
             tupleCounter++;
