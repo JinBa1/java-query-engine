@@ -18,6 +18,4 @@ public class Constants {
     /** Directory name where database data files are stored */
     public static final String DATA_DIRECTORY_NAME = "data";
 
-    /** SQL aggregation function name for sum operations */
-    public static final String SUM_FUNCTION_NAME = "SUM";
 }

@@ -64,4 +64,60 @@ public class AggregateLimitEndToEndTest {
                 () -> QueryPlanner.parseStatement(query.toString()));
         assertTrue(ex.getMessage().contains("SUM(*)"), ex.getMessage());
     }
+
+    @Test
+    public void countStarAndCountColumnAreEqual() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT COUNT(*), COUNT(Sales.qty) FROM Sales;");
+        assertEquals(List.of("count(*),count(sales.qty)", "3,3"), lines);
+    }
+
+    @Test
+    public void countStarAloneNeedsNoInputColumns() throws IOException {
+        // No WHERE, no GROUP BY, no argument columns: the required-column set is empty,
+        // exercising the skip-projection guard in the planner.
+        writeSales();
+        List<String> lines = run("SELECT COUNT(*) FROM Sales;");
+        assertEquals(List.of("count(*)", "3"), lines);
+    }
+
+    @Test
+    public void mixedAggregatesWithGroupBy() throws IOException {
+        writeSales();
+        List<String> lines = run(
+                "SELECT Sales.region, COUNT(*), MIN(Sales.qty), MAX(Sales.qty), AVG(Sales.qty) "
+                        + "FROM Sales GROUP BY Sales.region;");
+        assertEquals("region,count(*),min(sales.qty),max(sales.qty),avg(sales.qty)", lines.get(0));
+        assertTrue(lines.contains("east,2,3,10,6"), lines.toString());  // avg(10,3) = 13/2 -> 6
+        assertTrue(lines.contains("west,1,7,7,7"), lines.toString());
+        assertEquals(3, lines.size());
+    }
+
+    @Test
+    public void minMaxOnStringColumn() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT MIN(Sales.region), MAX(Sales.region) FROM Sales;");
+        assertEquals(List.of("min(sales.region),max(sales.region)", "east,west"), lines);
+    }
+
+    @Test
+    public void aggregateOnEmptyInputReturnsZeroRows() throws IOException {
+        writeTable("Empty", "a,b");
+        List<String> lines = run("SELECT COUNT(*), MIN(Empty.a) FROM Empty;");
+        assertEquals(List.of("count(*),min(empty.a)"), lines); // header only
+    }
+
+    @Test
+    public void bareColumnWithAggregatesAndNoGroupByIsRejected() throws IOException {
+        writeSales();
+        Path query = tempDb.resolve("bare.sql");
+        Files.writeString(query, "SELECT Sales.region, COUNT(*) FROM Sales;");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.parseStatement(query.toString()));
+        assertTrue(ex.getMessage().contains("GROUP BY"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("region"), ex.getMessage());
+    }
 }

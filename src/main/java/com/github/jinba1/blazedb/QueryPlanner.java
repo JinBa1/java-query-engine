@@ -146,41 +146,34 @@ public class QueryPlanner {
 
     /**
      * Processes GROUP BY and aggregation operations.
-     * Handles both queries with explicit GROUP BY and those with SUM aggregates only.
+     * Handles both queries with explicit GROUP BY and those with SUM/COUNT/AVG/MIN/MAX aggregates.
      * @param rootOp The operator tree so far
      * @param select The SELECT statement being processed
      * @return Updated operator tree with aggregation
      */
     private static Operator processGroupByAndAggregation(Operator rootOp, Select select) {
-        // Handle GROUP BY with SUM
-        if (existGroupByOp(select)) {
-            List<Column> groupByColumns = extractGroupByColumns(select);
-            List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
-            List<Column> outputColumns = extractNonAggregateColumns(select);
+        validateAggregateQuery(select);
 
-            Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
+        boolean hasGroupBy = existGroupByOp(select);
+        boolean hasAggregates = existAggregate(select);
 
-            // Project only required columns before aggregation
-            Operator childOp = rootOp;
-            rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
-
-            // Add the aggregate operator
-            rootOp = new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
-        }
-        // Handle SUM without GROUP BY
-        else if (existSumAggregate(select)) {
-            List<Column> groupByColumns = new ArrayList<>(); // Empty for no grouping
-            List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
-            List<Column> outputColumns = new ArrayList<>(); // Empty for no grouping
-
-            Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
-            Operator childOp = rootOp;
-            rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
-
-            rootOp = new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
+        if (!hasGroupBy && !hasAggregates) {
+            return rootOp;
         }
 
-        return rootOp;
+        List<Column> groupByColumns = hasGroupBy ? extractGroupByColumns(select) : new ArrayList<>();
+        List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
+        List<Column> outputColumns = hasGroupBy ? extractNonAggregateColumns(select) : new ArrayList<>();
+
+        Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
+
+        // SELECT COUNT(*) FROM t with no WHERE/GROUP BY needs no columns at all;
+        // a zero-column projection is meaningless, so skip it.
+        if (!requiredColumns.isEmpty()) {
+            rootOp = new ProjectOperator(rootOp, new ArrayList<>(requiredColumns));
+        }
+
+        return new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
     }
 
     /**
@@ -191,8 +184,8 @@ public class QueryPlanner {
      * @return Updated operator tree with projection
      */
     private static Operator processProjection(Operator rootOp, Select select) {
-        // Add projection if needed (only if not GROUP BY or SUM or if SELECT *)
-        if (existProjectOp(select) && !existSumAggregate(select) && !existGroupByOp(select)) {
+        // Add projection if needed (only if not GROUP BY or aggregate or if SELECT *)
+        if (existProjectOp(select) && !existAggregate(select) && !existGroupByOp(select)) {
             rootOp = new ProjectOperator(rootOp, getProjectCols(select));
         }
 
@@ -232,22 +225,35 @@ public class QueryPlanner {
     }
 
     /**
-     * Checks if any SUM aggregates exist in the query.
-     * @param select The SELECT statement to check
-     * @return true if any SUM aggregates exist, false otherwise
+     * Checks if any aggregate function (SUM/COUNT/AVG/MIN/MAX) appears in the SELECT list.
      */
-    private static boolean existSumAggregate(Select select) {
-        List<SelectItem<?>> selectItems = select.getPlainSelect().getSelectItems();
-        for (SelectItem<?> item : selectItems) {
+    private static boolean existAggregate(Select select) {
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
             Expression expr = item.getExpression();
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    return true;
-                }
+            if (expr instanceof Function function
+                    && AggregateFunction.fromFunctionName(function.getName()) != null) {
+                return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Rejects bare columns selected alongside aggregates without GROUP BY — the engine
+     * would otherwise silently drop them, which misleads agent callers.
+     */
+    private static void validateAggregateQuery(Select select) {
+        if (!existAggregate(select) || existGroupByOp(select)) {
+            return;
+        }
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
+            Expression expr = item.getExpression();
+            if (expr instanceof Column column) {
+                throw new QueryExecutionException(
+                        "Non-aggregate column '" + column
+                                + "' in SELECT with aggregates requires GROUP BY");
+            }
+        }
     }
 
     /**
