@@ -120,4 +120,47 @@ public class AggregateLimitEndToEndTest {
         assertTrue(ex.getMessage().contains("GROUP BY"), ex.getMessage());
         assertTrue(ex.getMessage().contains("region"), ex.getMessage());
     }
+
+    @Test
+    public void limitCapsResultAfterOrderBy() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT * FROM Sales ORDER BY Sales.qty LIMIT 2;");
+        assertEquals(List.of("region,qty", "east,3", "west,7"), lines);
+    }
+
+    @Test
+    public void limitZeroYieldsHeaderOnly() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT * FROM Sales LIMIT 0;");
+        assertEquals(List.of("region,qty"), lines);
+    }
+
+    @Test
+    public void limitBeyondRowCountYieldsAllRows() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT * FROM Sales LIMIT 100;");
+        assertEquals(4, lines.size()); // header + 3 rows
+    }
+
+    @Test
+    public void limitAppliesAfterDistinct() throws IOException {
+        writeSales();
+        List<String> lines = run("SELECT DISTINCT Sales.region FROM Sales LIMIT 2;");
+        assertEquals(3, lines.size()); // header + exactly the 2 distinct regions
+    }
+
+    @Test
+    public void negativeLimitIsRejected() throws IOException {
+        // JSqlParser 4.7 parses LIMIT -1 as a SignedExpression (not a LongValue),
+        // so our instanceof-LongValue guard fires and throws QueryExecutionException.
+        writeSales();
+        Path query = tempDb.resolve("neglimit.sql");
+        Files.writeString(query, "SELECT * FROM Sales LIMIT -1;");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.parseStatement(query.toString()));
+        assertTrue(ex.getMessage().contains("LIMIT requires a non-negative"), ex.getMessage());
+    }
 }

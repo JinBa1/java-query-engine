@@ -4,6 +4,7 @@ import com.github.jinba1.blazedb.operator.*;
 import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -64,6 +65,9 @@ public class QueryPlanner {
 
                 // Process DISTINCT and ORDER BY
                 rootOp = processDistinctAndOrderBy(rootOp, select);
+
+                // Process LIMIT (caps the final result, so applied last)
+                rootOp = processLimit(rootOp, select);
             }
         } catch (QueryExecutionException e) {
             throw e;
@@ -211,6 +215,30 @@ public class QueryPlanner {
         }
 
         return rootOp;
+    }
+
+    /**
+     * Applies the LIMIT clause, if present, as the topmost operator.
+     * Only plain "LIMIT n" with a non-negative integer literal is supported.
+     */
+    private static Operator processLimit(Operator rootOp, Select select) {
+        Limit limit = select.getLimit();
+        if (limit == null) {
+            return rootOp;
+        }
+        if (limit.getOffset() != null) {
+            throw new QueryExecutionException("OFFSET is not supported; use plain LIMIT n");
+        }
+        if (limit.isLimitAll() || limit.isLimitNull()) {
+            throw new QueryExecutionException(
+                    "LIMIT ALL / LIMIT NULL are not supported; use LIMIT n with n >= 0");
+        }
+        if (!(limit.getRowCount() instanceof LongValue rowCount) || rowCount.getValue() < 0) {
+            throw new QueryExecutionException(
+                    "LIMIT requires a non-negative integer literal; got '"
+                            + limit.getRowCount() + "'");
+        }
+        return new LimitOperator(rootOp, rowCount.getValue());
     }
 
     /**
