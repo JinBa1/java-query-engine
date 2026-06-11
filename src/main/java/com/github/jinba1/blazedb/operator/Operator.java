@@ -83,6 +83,12 @@ public abstract class Operator {
      * Resets the iterator to the start.
      */
     public abstract void reset();
+
+    /**
+     * One-line, human-readable description of this operator for plan rendering
+     * (e.g. "Scan[Sales]", "Select[Sales.qty > 5]"). No tree structure, no newlines.
+     */
+    public abstract String describe();
     /**
      * Propagates and retrieves the schema ID used to track schema transformations.
      * This method ensures schema consistency throughout the query evaluation. Each operator must appropriately propagate

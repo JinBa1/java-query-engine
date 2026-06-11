@@ -99,6 +99,11 @@ public class DuplicateEliminationOperator extends Operator {
         return intermediateSchemaId;
     }
 
+    @Override
+    public String describe() {
+        return "Distinct";
+    }
+
     /**
      * Registers the schema for this operator.
      * Creates a schema identical to the child operator's schema, since sorting

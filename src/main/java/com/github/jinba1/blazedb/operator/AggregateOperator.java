@@ -4,6 +4,7 @@ import com.github.jinba1.blazedb.*;
 import net.sf.jsqlparser.schema.Column;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * The AggregateOperator implements GROUP BY with SUM/COUNT/AVG/MIN/MAX aggregation in SQL.
@@ -200,6 +201,23 @@ public class AggregateOperator extends Operator {
     public String propagateSchemaId() {
         ensureSchemaRegistered();
         return intermediateSchemaId;
+    }
+
+    @Override
+    public String describe() {
+        StringBuilder sb = new StringBuilder("Aggregate[");
+        if (!groupByColumns.isEmpty()) {
+            sb.append("group by: ").append(groupByColumns.stream().map(Column::toString)
+                    .collect(Collectors.joining(", ")));
+        }
+        if (!aggregateCalls.isEmpty()) {
+            if (!groupByColumns.isEmpty()) {
+                sb.append("; ");
+            }
+            sb.append("calls: ").append(aggregateCalls.stream().map(AggregateCall::schemaKey)
+                    .collect(Collectors.joining(", ")));
+        }
+        return sb.append("]").toString();
     }
 
     /**

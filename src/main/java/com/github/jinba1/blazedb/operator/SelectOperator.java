@@ -75,6 +75,11 @@ public class SelectOperator extends Operator {
         return intermediateSchemaId;
     }
 
+    @Override
+    public String describe() {
+        return "Select[" + expression + "]";
+    }
+
     /**
      * Get the select conditions.
      * @return The selection condition as expression instance.

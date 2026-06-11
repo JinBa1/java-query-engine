@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This operator performs projection (π) in relational algebra,
@@ -132,6 +133,12 @@ public class ProjectOperator extends Operator {
         );
 
         schemaRegistered = true;
+    }
+
+    @Override
+    public String describe() {
+        return "Project[" + columns.stream().map(Column::toString)
+                .collect(Collectors.joining(", ")) + "]";
     }
 
     /**

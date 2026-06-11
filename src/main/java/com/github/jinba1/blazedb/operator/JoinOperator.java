@@ -300,6 +300,11 @@ public class JoinOperator extends Operator {
             transformationDetails.put(columnKey, sourceSchemaId + ":" + sourceIndex);
         }
     }
+    @Override
+    public String describe() {
+        return "Join[" + (expression != null ? expression : "cross") + "]";
+    }
+
     /**
      * Returns the join condition expression.
      * @return The expression used as the join condition, or null for cross product

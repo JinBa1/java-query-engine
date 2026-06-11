@@ -54,6 +54,11 @@ public class LimitOperator extends Operator {
     }
 
     @Override
+    public String describe() {
+        return "Limit[" + limit + "]";
+    }
+
+    @Override
     protected void registerSchema() {
         if (schemaRegistered) return;
         Map<String, String> transformationDetails = new HashMap<>();

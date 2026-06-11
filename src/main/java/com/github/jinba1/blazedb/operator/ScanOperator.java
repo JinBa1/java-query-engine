@@ -151,6 +151,11 @@ public class ScanOperator extends Operator {
         this.schemaRegistered = true;
     }
 
+    @Override
+    public String describe() {
+        return "Scan[" + tableName + "]";
+    }
+
     /**
      * Get the name of the table this operator scans.
      * @return The name of the table.
