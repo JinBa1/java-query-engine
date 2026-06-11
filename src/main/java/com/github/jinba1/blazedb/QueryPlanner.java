@@ -65,6 +65,8 @@ public class QueryPlanner {
                 // Process DISTINCT and ORDER BY
                 rootOp = processDistinctAndOrderBy(rootOp, select);
             }
+        } catch (QueryExecutionException e) {
+            throw e;
         } catch (Exception e) {
             System.err.println("Exception occurred during parsing");
             e.printStackTrace();
@@ -291,8 +293,12 @@ public class QueryPlanner {
             }
 
             Expression argument;
-            if (function.isAllColumns() || function.getParameters() == null
-                    || function.getParameters().isEmpty()) {
+            boolean isStar = function.isAllColumns()
+                    || function.getParameters() == null
+                    || function.getParameters().isEmpty()
+                    || (function.getParameters().size() == 1
+                            && function.getParameters().get(0) instanceof AllColumns);
+            if (isStar) {
                 if (aggregateFunction != AggregateFunction.COUNT) {
                     throw new QueryExecutionException(
                             function.getName() + "(*) is not supported; only COUNT(*) may use '*'");
