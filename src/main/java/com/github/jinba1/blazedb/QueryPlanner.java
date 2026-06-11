@@ -10,6 +10,7 @@ import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.ExplainStatement;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 
@@ -35,39 +36,37 @@ public class QueryPlanner {
 
     /**
      * Parses an SQL statement from a file and constructs a query plan.
-     * This is the main entry point for query processing in BlazeDB.
+     * Kept for existing callers; EXPLAIN-aware callers should use {@link #planQuery}.
      * @param filename The path to a file containing a valid SQL query
      * @return The root operator of the constructed query plan, or null if parsing fails
      */
     public static Operator parseStatement(String filename) {
+        return planQuery(filename).root();
+    }
+
+    /**
+     * Plans one query file. For EXPLAIN queries, renders the operator tree before and
+     * after optimization into {@link PlannedQuery#explainText()}; the returned root is
+     * the optimized, executable tree either way.
+     * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
+     * @return The planned query; root is null if parsing fails
+     */
+    public static PlannedQuery planQuery(String filename) {
         Operator rootOp = null;
+        boolean explain = false;
         try {
             Statement statement = CCJSqlParserUtil.parse(new FileReader(filename));
 
-            if (statement != null) {
-                Select select = (Select) statement;
-                // Create scan operator for the first table
-                rootOp = createScanOperator(select);
+            Select select = null;
+            if (statement instanceof ExplainStatement explainStatement) {
+                explain = true;
+                select = explainStatement.getStatement();
+            } else if (statement != null) {
+                select = (Select) statement;
+            }
 
-                // Process joins if they exist
-                if (existJoinOp(select)) {
-                    rootOp = processJoins(rootOp, select);
-                } else if (existSelectOp(select)) {
-                    // For queries without joins, add selection directly
-                    rootOp = new SelectOperator(rootOp, select.getPlainSelect().getWhere());
-                }
-
-                // Process GROUP BY and aggregation
-                rootOp = processGroupByAndAggregation(rootOp, select);
-
-                // Process projection (if needed)
-                rootOp = processProjection(rootOp, select);
-
-                // Process DISTINCT and ORDER BY
-                rootOp = processDistinctAndOrderBy(rootOp, select);
-
-                // Process LIMIT (caps the final result, so applied last)
-                rootOp = processLimit(rootOp, select);
+            if (select != null) {
+                rootOp = buildOperatorTree(select);
             }
         } catch (QueryExecutionException e) {
             throw e;
@@ -79,10 +78,40 @@ public class QueryPlanner {
         // Ensure schemas are properly registered
         ensureAllSchemasRegistered(rootOp);
 
+        String beforeText = (explain && rootOp != null) ? PlanPrinter.print(rootOp) : null;
+
         // Apply query optimization if enabled
         if (Constants.useQueryOptimization) {
             rootOp = QueryPlanOptimizer.optimize(rootOp);
         }
+
+        String explainText = null;
+        if (explain && rootOp != null) {
+            explainText = "=== Plan (as written) ===\n" + beforeText
+                    + "\n=== Plan (optimized) ===\n" + PlanPrinter.print(rootOp);
+        }
+
+        return new PlannedQuery(rootOp, explainText);
+    }
+
+    /**
+     * Builds the unoptimized operator tree for a SELECT (the pipeline previously inlined
+     * in parseStatement): scan, joins/selection, aggregation, projection, distinct/order,
+     * limit.
+     */
+    private static Operator buildOperatorTree(Select select) {
+        Operator rootOp = createScanOperator(select);
+
+        if (existJoinOp(select)) {
+            rootOp = processJoins(rootOp, select);
+        } else if (existSelectOp(select)) {
+            rootOp = new SelectOperator(rootOp, select.getPlainSelect().getWhere());
+        }
+
+        rootOp = processGroupByAndAggregation(rootOp, select);
+        rootOp = processProjection(rootOp, select);
+        rootOp = processDistinctAndOrderBy(rootOp, select);
+        rootOp = processLimit(rootOp, select);
 
         return rootOp;
     }
