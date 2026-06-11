@@ -204,14 +204,14 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, query budgets, EXPLAIN, and end-to-end integration scenarios (315 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, query budgets, EXPLAIN, and end-to-end integration scenarios (317 tests).
 
 ## Project Structure
 
 ```
 ├── src/main/java/com/github/jinba1/blazedb/   # Core engine (35 files)
 │   └── operator/                                # Volcano operators (10 files)
-├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests (315 tests across 29 files)
+├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests (317 tests across 29 files)
 ├── samples/
 │   ├── db/data/                                 # CSV data files (header row + data rows)
 │   ├── input/query[1-20].sql                    # Sample queries
