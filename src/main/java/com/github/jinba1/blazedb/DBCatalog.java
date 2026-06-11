@@ -328,6 +328,28 @@ public class DBCatalog {
     }
 
     /**
+     * Result-header names for a schema, in column order.
+     * Plain columns are bare-ified (qualifier stripped: "student.a" -> "a");
+     * aggregate keys (containing '(') are kept whole, lowercased.
+     */
+    public List<String> getOrderedColumnNames(String schemaId) {
+        Map<String, Integer> schema = getSchema(schemaId);
+        if (schema == null) {
+            throw new QueryExecutionException("Unknown schema: " + schemaId);
+        }
+        String[] names = new String[schema.size()];
+        for (Map.Entry<String, Integer> e : schema.entrySet()) {
+            String name = e.getKey().toLowerCase();
+            if (!name.contains("(")) {
+                int dot = name.lastIndexOf('.');
+                if (dot >= 0) name = name.substring(dot + 1);
+            }
+            names[e.getValue()] = name;
+        }
+        return Arrays.asList(names);
+    }
+
+    /**
      * Column resolution that considers origin tracking information.
      * This method first tries direct resolution with smartResolveColumnIndex,
      * then attempts resolution through origin tracking, and finally tries

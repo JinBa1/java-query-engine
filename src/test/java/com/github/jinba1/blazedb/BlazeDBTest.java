@@ -34,6 +34,26 @@ import java.util.*;
  */
 public class BlazeDBTest {
 
+	@org.junit.jupiter.api.io.TempDir
+	Path tempDb;
+
+	private void writeTable(String name, String... lines) throws java.io.IOException {
+		Path data = tempDb.resolve("data");
+		Files.createDirectories(data);
+		Files.write(data.resolve(name + ".csv"), List.of(lines));
+	}
+
+	@Test
+	public void outputHasHeaderAndRfcCommas() throws Exception {
+		writeTable("People", "id,name", "1,alice", "2,\"smith, bob\"");
+		Path query = tempDb.resolve("q.sql");
+		Files.writeString(query, "SELECT * FROM People;");
+		Path out = tempDb.resolve("out.csv");
+		BlazeDB.main(new String[]{tempDb.toString(), query.toString(), out.toString()});
+		List<String> lines = Files.readAllLines(out);
+		assertEquals(List.of("id,name", "1,alice", "2,\"smith, bob\""), lines);
+	}
+
 	private static final String TEST_DB_DIR = "src/test/resources/test_integration_db";
 	private static final String TEST_QUERIES_DIR = "src/test/resources/test_integration_queries";
 	private static final String TEST_OUTPUT_DIR = "src/test/resources/test_integration_output";

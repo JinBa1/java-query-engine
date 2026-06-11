@@ -300,4 +300,23 @@ class DBCatalogTest {
         Map<String, Integer> enrolledSchema = catalog.getDBSchemata("Enrolled");
         assertEquals(3, enrolledSchema.size(), "Enrolled has 3 columns: A, E, H");
     }
+
+    @Test
+    public void orderedColumnNamesBareForBaseTable() throws IOException {
+        writeTable("Student", "A,B,C", "1,2,3");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        assertEquals(List.of("a", "b", "c"),
+                DBCatalog.getInstance().getOrderedColumnNames("Student"));
+    }
+
+    @Test
+    public void orderedColumnNamesStripQualifierAndKeepAggregates() {
+        Map<String, Integer> schema = Map.of("student.a", 0, "SUM(student.b)", 1);
+        DBCatalog.resetDBCatalog();
+        String id = DBCatalog.getInstance().registerSchemaWithTransformation(
+                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
+        assertEquals(List.of("a", "sum(student.b)"),
+                DBCatalog.getInstance().getOrderedColumnNames(id));
+    }
 }
