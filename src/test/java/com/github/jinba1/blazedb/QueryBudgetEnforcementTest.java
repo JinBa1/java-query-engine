@@ -94,4 +94,15 @@ public class QueryBudgetEnforcementTest {
                 tempDb.toString(), query.toString(), out.toString(), "--max-tuples=-5"}));
         assertFalse(Files.exists(out));
     }
+
+    @Test
+    public void unparseableQueryFailsGracefully() throws IOException {
+        Path query = writeQuery("THIS IS NOT SQL;");
+        Path out = tempDb.resolve("out-garbage.csv");
+
+        int code = BlazeDB.run(new String[]{tempDb.toString(), query.toString(), out.toString()});
+
+        assertEquals(1, code);
+        assertFalse(Files.exists(out));
+    }
 }

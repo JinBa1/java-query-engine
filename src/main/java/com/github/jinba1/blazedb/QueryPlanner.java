@@ -80,8 +80,8 @@ public class QueryPlanner {
 
         String beforeText = (explain && rootOp != null) ? PlanPrinter.print(rootOp) : null;
 
-        // Apply query optimization if enabled
-        if (Constants.useQueryOptimization) {
+        // Apply query optimization if enabled (skip when planning failed: root is null)
+        if (Constants.useQueryOptimization && rootOp != null) {
             rootOp = QueryPlanOptimizer.optimize(rootOp);
         }
 
