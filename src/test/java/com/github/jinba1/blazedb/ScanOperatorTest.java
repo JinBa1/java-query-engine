@@ -17,11 +17,21 @@ import com.github.jinba1.blazedb.operator.ScanOperator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import com.github.jinba1.blazedb.DBCatalog;
 import com.github.jinba1.blazedb.Tuple;
 
 public class ScanOperatorTest {
+
+    @TempDir
+    Path tempDb;
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
 
     private static final String TEST_DB_DIR = "src/test/resources/testdb";
     private static final String SCHEMA_FILE = TEST_DB_DIR + "/schema.txt";
@@ -42,14 +52,15 @@ public class ScanOperatorTest {
 
         // Create test data file with some sample data
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + TEST_TABLE + ".csv"))) {
-            writer.write("1, 10, 100, 1000\n");
-            writer.write("2, 20, 200, 2000\n");
-            writer.write("3, 30, 300, 3000\n");
+            writer.write("A,B,C,D\n");
+            writer.write("1,10,100,1000\n");
+            writer.write("2,20,200,2000\n");
+            writer.write("3,30,300,3000\n");
         }
 
-        // Create empty table file
+        // Create empty table file (header row required by catalog)
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DATA_DIR + "/" + EMPTY_TABLE + ".csv"))) {
-            // Intentionally left empty
+            writer.write("X,Y,Z\n");
         }
 
         // Initialize the database catalog
@@ -166,5 +177,29 @@ public class ScanOperatorTest {
         // After closing, getNextTuple should gracefully handle the situation
         Tuple tuple = scanOp.getNextTuple();
         assertNull(tuple, "Tuple from closed scanner should be null");
+    }
+
+    @Test
+    public void scansTypedValuesSkippingHeader() throws IOException {
+        writeTable("People", "id,name", "1,alice", "2,\"smith, bob\"");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        ScanOperator scan = new ScanOperator("People");
+        assertEquals(new Tuple(List.of(new IntValue(1), new StringValue("alice"))), scan.getNextTuple());
+        assertEquals(new Tuple(List.of(new IntValue(2), new StringValue("smith, bob"))), scan.getNextTuple());
+        assertNull(scan.getNextTuple());
+        scan.close();
+    }
+
+    @Test
+    public void resetRestartsAfterHeader() throws IOException {
+        writeTable("T", "a", "7");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        ScanOperator scan = new ScanOperator("T");
+        assertEquals(new IntValue(7), scan.getNextTuple().getAttribute(0));
+        scan.reset();
+        assertEquals(new IntValue(7), scan.getNextTuple().getAttribute(0));
+        scan.close();
     }
 }

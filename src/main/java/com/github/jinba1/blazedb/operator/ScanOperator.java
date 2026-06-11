@@ -1,15 +1,23 @@
 package com.github.jinba1.blazedb.operator;
 
-import com.github.jinba1.blazedb.Tuple;
+import com.github.jinba1.blazedb.ColumnType;
 import com.github.jinba1.blazedb.DBCatalog;
-import com.github.jinba1.blazedb.Value;
 import com.github.jinba1.blazedb.IntValue;
+import com.github.jinba1.blazedb.QueryExecutionException;
+import com.github.jinba1.blazedb.StringValue;
+import com.github.jinba1.blazedb.Tuple;
+import com.github.jinba1.blazedb.Value;
 
-import java.io.BufferedReader;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+
 import java.io.IOException;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 
 /**
  * The ScanOperator class is a leaf-level operator within the BlazeDB query execution plan.
@@ -22,7 +30,9 @@ public class ScanOperator extends Operator {
 
     private final Path tablePath;
     private final String tableName;
-    private BufferedReader reader;
+    private final List<ColumnType> columnTypes;
+    private CSVParser parser;
+    private Iterator<CSVRecord> records;
 
     /**
      * Construct a scan operator for the given table.
@@ -31,6 +41,7 @@ public class ScanOperator extends Operator {
     public ScanOperator(String tableName) {
         this.tableName = tableName;
         tablePath = DBCatalog.getInstance().getDBLocation(tableName);
+        this.columnTypes = DBCatalog.getInstance().getColumnTypes(tableName);
         child = null; // Scan cannot have child operator
 
         this.schemaRegistered = true;
@@ -40,44 +51,56 @@ public class ScanOperator extends Operator {
     }
 
     /**
-     * Open up a buffered reader for the table this operator scan.
+     * Open up a CSVParser for the table this operator scans, skipping the header row.
      */
     private void openReader() {
         try {
-            reader = Files.newBufferedReader(tablePath);
+            CSVFormat format = CSVFormat.RFC4180.builder()
+                    .setIgnoreSurroundingSpaces(true)
+                    .build();
+            parser = CSVParser.parse(tablePath, StandardCharsets.UTF_8, format);
+            records = parser.iterator();
+            if (records.hasNext()) {
+                records.next(); // skip header row
+            }
         } catch (IOException e) {
-            System.err.println("Failed to open reader for table " + tableName + ": " + e.getMessage());
-            e.printStackTrace();
+            throw new QueryExecutionException("Failed to open table '" + tableName + "': " + e.getMessage());
         }
     }
 
     /**
-     * Retrieves the next tuple from the table by reading the next line from the CSV file.
-     * If the end of the file is reached, the reader is closed, and null is returned.
-     * @return
+     * Retrieves the next tuple from the table by reading the next CSV record.
+     * If the end of the file is reached, the parser is closed, and null is returned.
+     * @return The next Tuple, or null if the end of file has been reached.
      */
     @Override
     public Tuple getNextTuple() {
-        try {
-            String line = reader.readLine();
-            if (line == null) { // END OF FILE
-                closeReader();
-                return null;
-            }
-
-            String[] values = line.split(",\\s*"); // parse the line
-            ArrayList<Value> attributes = new ArrayList<>();
-            for (String value : values) {
-                attributes.add(new IntValue(Integer.parseInt(value.trim())));
-            }
-
-            tupleCounter++;
-            return new Tuple(attributes);
-        } catch (IOException e) {
-            System.err.println("Error reading tuple: " + e.getMessage());
-            e.printStackTrace();
+        if (!records.hasNext()) {
+            closeReader();
             return null;
         }
+        CSVRecord record = records.next();
+        if (record.size() != columnTypes.size()) {
+            throw new QueryExecutionException("Table '" + tableName + "' row " + record.getRecordNumber()
+                    + ": expected " + columnTypes.size() + " fields, found " + record.size());
+        }
+        List<Value> attributes = new ArrayList<>(columnTypes.size());
+        for (int i = 0; i < columnTypes.size(); i++) {
+            String field = record.get(i);
+            if (columnTypes.get(i) == ColumnType.INT) {
+                try {
+                    attributes.add(new IntValue(Integer.parseInt(field)));
+                } catch (NumberFormatException e) {
+                    throw new QueryExecutionException("Table '" + tableName + "' row " + record.getRecordNumber()
+                            + ", column " + i + ": expected int, found '" + field
+                            + "' (file changed since catalog init?)");
+                }
+            } else {
+                attributes.add(new StringValue(field));
+            }
+        }
+        tupleCounter++;
+        return new Tuple(attributes);
     }
 
     /**
@@ -86,15 +109,8 @@ public class ScanOperator extends Operator {
      */
     @Override
     public void reset() {
-        try {
-            if (reader != null) {
-                reader.close();
-            }
-            openReader();
-        } catch (IOException e) {
-            System.err.println("Error reading tuple: " + e.getMessage());
-            e.printStackTrace();
-        }
+        closeReader();
+        openReader();
     }
 
     /**
@@ -107,16 +123,15 @@ public class ScanOperator extends Operator {
     }
 
     /**
-     * Close the reader used.
+     * Close the parser used.
      */
     private void closeReader() {
         try {
-            if (reader != null) {
-                reader.close();
+            if (parser != null && !parser.isClosed()) {
+                parser.close();
             }
         } catch (IOException e) {
-            System.err.println("Error closing reader for table " + tableName + ": " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("Error closing parser for table " + tableName + ": " + e.getMessage());
         }
     }
 
@@ -135,6 +150,7 @@ public class ScanOperator extends Operator {
     protected void registerSchema() {
         this.schemaRegistered = true;
     }
+
     /**
      * Get the name of the table this operator scans.
      * @return The name of the table.
