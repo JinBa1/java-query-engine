@@ -8,12 +8,12 @@ import java.util.List;
 import com.github.jinba1.blazedb.operator.Operator;
 
 /**
- * Runs all 16 sample queries and diffs output against expected results.
+ * Runs all 19 sample queries and diffs output against expected results.
  * Exit code 0 if all pass, 1 if any fail.
  */
 public class SampleQueryRunner {
 
-    private static final int QUERY_COUNT = 16;
+    private static final int QUERY_COUNT = 19;
 
     public static void main(String[] args) throws Exception {
         Path projectRoot = Paths.get("").toAbsolutePath();
