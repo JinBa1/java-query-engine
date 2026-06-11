@@ -114,7 +114,7 @@ public class JoinOperator extends Operator {
      * @param rightTuple The tuple from the inner child
      * @return A new tuple containing all attributes from both input tuples
      */
-    private Tuple combineTuples(Tuple leftTuple, Tuple rightTuple) {
+    protected Tuple combineTuples(Tuple leftTuple, Tuple rightTuple) {
         ArrayList<Value> combinedAttributes = new ArrayList<>();
         combinedAttributes.addAll(leftTuple.getTuple());
         combinedAttributes.addAll(rightTuple.getTuple());
