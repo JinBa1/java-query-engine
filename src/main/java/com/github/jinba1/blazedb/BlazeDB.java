@@ -102,42 +102,48 @@ public class BlazeDB {
 	 * @param outputFile The name of the file where the result will be written.
 	 */
 	public static void execute(Operator root, String outputFile) {
+		File outputFileObj = new File(outputFile);
+		File parentDir = outputFileObj.getParentFile();
+		if (parentDir != null && !parentDir.exists()) {
+			boolean created = parentDir.mkdirs();
+			if (!created) {
+				System.err.println("Failed to create output directory: " + parentDir.getAbsolutePath());
+			}
+		}
+
+		List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
+		CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
 		try {
-			File outputFileObj = new File(outputFile);
-			File parentDir = outputFileObj.getParentFile();
-			if (parentDir != null && !parentDir.exists()) {
-				boolean created = parentDir.mkdirs();
-				if (!created) {
-					System.err.println("Failed to create output directory: " + parentDir.getAbsolutePath());
-				}
-			}
-
-			List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
-			CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
-			try {
-				try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
-					printer.printRecord(headers);
-					Tuple tuple;
-					while ((tuple = root.getNextTuple()) != null) {
-						List<String> fields = new ArrayList<>(tuple.getTuple().size());
-						for (Value v : tuple.getTuple()) {
-							fields.add(v.toString());
-						}
-						printer.printRecord(fields);
+			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
+				printer.printRecord(headers);
+				Tuple tuple;
+				while ((tuple = root.getNextTuple()) != null) {
+					List<String> fields = new ArrayList<>(tuple.getTuple().size());
+					for (Value v : tuple.getTuple()) {
+						fields.add(v.toString());
 					}
+					printer.printRecord(fields);
 				}
-			} catch (QueryExecutionException e) {
-				// Never leave a truncated file that looks like a complete result
-				if (!outputFileObj.delete() && outputFileObj.exists()) {
-					System.err.println("Warning: failed to delete partial output: " + outputFile);
-				}
-				throw e;
 			}
-
-			System.out.println("Query executed successfully!");
-			System.out.println("Output file: " + outputFile);
+		} catch (QueryExecutionException e) {
+			deletePartialOutput(outputFileObj, outputFile);
+			throw e;
 		} catch (IOException e) {
-			e.printStackTrace();
+			// Disk full, permissions, output path is a directory, ... — swallowing this
+			// would make a broken or missing file look like success to callers
+			deletePartialOutput(outputFileObj, outputFile);
+			throw new QueryExecutionException(
+					"Failed to write output file '" + outputFile + "': " + e.getMessage());
+		}
+
+		System.out.println("Query executed successfully!");
+		System.out.println("Output file: " + outputFile);
+	}
+
+	/** Never leave a truncated file that looks like a complete result. */
+	private static void deletePartialOutput(File outputFileObj, String outputFile) {
+		if (outputFileObj.isFile() && !outputFileObj.delete()) {
+			System.err.println("Warning: failed to delete partial output: " + outputFile);
 		}
 	}
 }

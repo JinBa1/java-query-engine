@@ -96,6 +96,17 @@ public class QueryBudgetEnforcementTest {
     }
 
     @Test
+    public void ioFailureDuringWriteReturnsNonZero() throws IOException {
+        Path query = writeQuery("SELECT * FROM L;");
+        Path out = tempDb.resolve("out-collide.csv");
+        Files.createDirectory(out); // output path is a directory: FileWriter must fail
+
+        int code = BlazeDB.run(new String[]{tempDb.toString(), query.toString(), out.toString()});
+
+        assertEquals(1, code, "IO failure during write must not look like success");
+    }
+
+    @Test
     public void unparseableQueryFailsGracefully() throws IOException {
         Path query = writeQuery("THIS IS NOT SQL;");
         Path out = tempDb.resolve("out-garbage.csv");
