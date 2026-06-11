@@ -15,15 +15,9 @@ public class Constants {
     /** Prefix used to identify intermediate schemas created during query processing */
     public static final String INTERMEDIATE_SCHEMA_PREFIX = "temp_";
 
-    /** Standard filename for database schema definitions */
-    public static final String SCHEMA_FILE_NAME = "schema.txt";
-
     /** Directory name where database data files are stored */
     public static final String DATA_DIRECTORY_NAME = "data";
 
     /** SQL aggregation function name for sum operations */
     public static final String SUM_FUNCTION_NAME = "SUM";
-
-    /** Regular expression used for splitting schema file entries */
-    public static final String SPLITTER_REGEX = "\\s+";
 }

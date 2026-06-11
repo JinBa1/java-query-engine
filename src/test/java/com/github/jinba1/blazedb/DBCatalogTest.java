@@ -2,6 +2,8 @@ package com.github.jinba1.blazedb;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -12,14 +14,87 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DBCatalogTest {
 
     private static final String SAMPLE_DB_DIR = "samples/db";
 
+    @TempDir
+    Path tempDb;
+
     @BeforeEach
     void setUp() {
         DBCatalog.resetDBCatalog();
+    }
+
+    private void writeTable(String name, String... lines) throws IOException {
+        Path data = tempDb.resolve("data");
+        Files.createDirectories(data);
+        Files.write(data.resolve(name + ".csv"), List.of(lines));
+    }
+
+    @Test
+    public void discoversTablesAndColumnNamesFromHeaders() throws IOException {
+        writeTable("Student", "A,B,C", "1,2,3");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        Map<String, Integer> schema = DBCatalog.getInstance().getDBSchemata("Student");
+        assertEquals(Map.of("a", 0, "b", 1, "c", 2), schema);
+    }
+
+    @Test
+    public void allIntColumnInferredInt() throws IOException {
+        writeTable("T", "A,B", "1,x", "2,y");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        assertEquals(List.of(ColumnType.INT, ColumnType.STRING),
+                DBCatalog.getInstance().getColumnTypes("T"));
+    }
+
+    @Test
+    public void mixedOrEmptyFieldForcesString() throws IOException {
+        writeTable("T", "A,B", "1,5", "abc,"); // A mixed, B has empty field
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        assertEquals(List.of(ColumnType.STRING, ColumnType.STRING),
+                DBCatalog.getInstance().getColumnTypes("T"));
+    }
+
+    @Test
+    public void headerOnlyTableDefaultsToInt() throws IOException {
+        writeTable("T", "A,B");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+        assertEquals(List.of(ColumnType.INT, ColumnType.INT),
+                DBCatalog.getInstance().getColumnTypes("T"));
+    }
+
+    @Test
+    public void duplicateHeaderThrows() throws IOException {
+        writeTable("T", "A,A", "1,2");
+        DBCatalog.resetDBCatalog();
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> DBCatalog.initDBCatalog(tempDb.toString()));
+        assertTrue(e.getMessage().contains("duplicate column"));
+    }
+
+    @Test
+    public void emptyFileThrows() throws IOException {
+        writeTable("T");
+        DBCatalog.resetDBCatalog();
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> DBCatalog.initDBCatalog(tempDb.toString()));
+        assertTrue(e.getMessage().contains("no header"));
+    }
+
+    @Test
+    public void raggedRowThrowsAtInit() throws IOException {
+        writeTable("T", "A,B", "1,2,3");
+        DBCatalog.resetDBCatalog();
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> DBCatalog.initDBCatalog(tempDb.toString()));
+        assertTrue(e.getMessage().contains("expected 2"));
     }
 
     @Test
