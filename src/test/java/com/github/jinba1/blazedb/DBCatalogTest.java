@@ -319,4 +319,17 @@ class DBCatalogTest {
         assertEquals(List.of("a", "sum(student.b)"),
                 DBCatalog.getInstance().getOrderedColumnNames(id));
     }
+
+    @Test
+    public void orderedColumnNamesHandleAliasedJoinSchemas() {
+        Map<String, Integer> schema = new HashMap<>();
+        schema.put("student.a", 0); schema.put("a", 0);
+        schema.put("student.b", 1); schema.put("b", 1);
+        schema.put("enrolled.i", 2); schema.put("i", 2);
+        DBCatalog.resetDBCatalog();
+        String id = DBCatalog.getInstance().registerSchemaWithTransformation(
+                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
+        assertEquals(List.of("a", "b", "i"),
+                DBCatalog.getInstance().getOrderedColumnNames(id));
+    }
 }

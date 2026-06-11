@@ -68,10 +68,7 @@ public class BlazeDBTest {
 		Files.createDirectories(Paths.get(TEST_OUTPUT_DIR));
 		Files.createDirectories(Paths.get(EXPECTED_OUTPUT_DIR));
 
-		// Create schema file
-		createSchemaFile();
-
-		// Create data files
+		// Create data files (schema is inferred from the CSV header rows)
 		createStudentData();
 		createCourseData();
 		createEnrolledData();
@@ -100,12 +97,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT * FROM Student;";
 
 		String expectedOutput =
-				"1, 25, 85, 30\n" +
-						"2, 30, 22, 40\n" +
-						"3, 35, 19, 20\n" +
-						"4, 40, 21, 40\n" +
-						"5, 45, 65, 30\n" +
-						"6, 50, 32, 10\n";
+				"a,b,c,d\n" +
+						"1,25,85,30\n" +
+						"2,30,22,40\n" +
+						"3,35,19,20\n" +
+						"4,40,21,40\n" +
+						"5,45,65,30\n" +
+						"6,50,32,10\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -119,12 +117,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.D FROM Student;";
 
 		String expectedOutput =
-				"1, 30\n" +
-						"2, 40\n" +
-						"3, 20\n" +
-						"4, 40\n" +
-						"5, 30\n" +
-						"6, 10\n";
+				"a,d\n" +
+						"1,30\n" +
+						"2,40\n" +
+						"3,20\n" +
+						"4,40\n" +
+						"5,30\n" +
+						"6,10\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -138,8 +137,9 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.B, Student.D FROM Student WHERE Student.D > 30;";
 
 		String expectedOutput =
-				"2, 30, 40\n" +
-						"4, 40, 40\n";
+				"a,b,d\n" +
+						"2,30,40\n" +
+						"4,40,40\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -153,8 +153,9 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.C FROM Student WHERE Student.D >= 30 AND Student.C < 50;";
 
 		String expectedOutput =
-				"2, 22\n" +
-						"4, 21\n";
+				"a,c\n" +
+						"2,22\n" +
+						"4,21\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -168,12 +169,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.B, Enrolled.J, Enrolled.K FROM Student, Enrolled WHERE Student.A = Enrolled.I;";
 
 		String expectedOutput =
-				"1, 25, 101, 85\n" +
-						"1, 25, 102, 92\n" +
-						"2, 30, 101, 91\n" +
-						"2, 30, 103, 84\n" +
-						"3, 35, 102, 78\n" +
-						"4, 40, 104, 65\n";
+				"a,b,j,k\n" +
+						"1,25,101,85\n" +
+						"1,25,102,92\n" +
+						"2,30,101,91\n" +
+						"2,30,103,84\n" +
+						"3,35,102,78\n" +
+						"4,40,104,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -187,12 +189,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.B, Course.F, Enrolled.K FROM Student, Enrolled, Course WHERE Student.A = Enrolled.I AND Enrolled.J = Course.E;";
 
 		String expectedOutput =
-				"1, 25, 201, 85\n" +
-						"1, 25, 202, 92\n" +
-						"2, 30, 201, 91\n" +
-						"2, 30, 203, 84\n" +
-						"3, 35, 202, 78\n" +
-						"4, 40, 204, 65\n";
+				"a,b,f,k\n" +
+						"1,25,201,85\n" +
+						"1,25,202,92\n" +
+						"2,30,201,91\n" +
+						"2,30,203,84\n" +
+						"3,35,202,78\n" +
+						"4,40,204,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -212,8 +215,9 @@ public class BlazeDBTest {
 		// Student 2 is enrolled in Course 103 (matching H=3)
 		// Student 4 is enrolled in Course 104 (matching H=3)
 		String expectedOutput =
-				"2, 30, 203, 84\n" +
-						"4, 40, 204, 65\n";
+				"a,b,f,k\n" +
+						"2,30,203,84\n" +
+						"4,40,204,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -227,10 +231,11 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.B, Course.F, Enrolled.K FROM Student, Enrolled, Course WHERE Student.A = Enrolled.I AND Enrolled.J = Course.E AND Enrolled.K > 80;";
 
 		String expectedOutput =
-				"1, 25, 201, 85\n" +
-						"1, 25, 202, 92\n" +
-						"2, 30, 201, 91\n" +
-						"2, 30, 203, 84\n";
+				"a,b,f,k\n" +
+						"1,25,201,85\n" +
+						"1,25,202,92\n" +
+						"2,30,201,91\n" +
+						"2,30,203,84\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -244,7 +249,8 @@ public class BlazeDBTest {
 		String queryContent = "SELECT DISTINCT Student.D FROM Student;";
 
 		String expectedOutput =
-				"30\n" +
+				"d\n" +
+						"30\n" +
 						"40\n" +
 						"20\n" +
 						"10\n";
@@ -261,12 +267,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.D FROM Student ORDER BY Student.D;";
 
 		String expectedOutput =
-				"6, 10\n" +
-						"3, 20\n" +
-						"1, 30\n" +
-						"5, 30\n" +
-						"2, 40\n" +
-						"4, 40\n";
+				"a,d\n" +
+						"6,10\n" +
+						"3,20\n" +
+						"1,30\n" +
+						"5,30\n" +
+						"2,40\n" +
+						"4,40\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -280,12 +287,13 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.A, Student.D, Student.C FROM Student ORDER BY Student.D, Student.C;";
 
 		String expectedOutput =
-				"6, 10, 32\n" +
-						"3, 20, 19\n" +
-						"5, 30, 65\n" +
-						"1, 30, 85\n" +
-						"4, 40, 21\n" +
-						"2, 40, 22\n";
+				"a,d,c\n" +
+						"6,10,32\n" +
+						"3,20,19\n" +
+						"5,30,65\n" +
+						"1,30,85\n" +
+						"4,40,21\n" +
+						"2,40,22\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -299,10 +307,11 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.D, SUM(Student.C) FROM Student GROUP BY Student.D;";
 
 		String expectedOutput =
-				"10, 32\n" +
-						"20, 19\n" +
-						"30, 150\n" +
-						"40, 43\n";
+				"d,sum(student.c)\n" +
+						"20,19\n" +
+						"40,43\n" +
+						"10,32\n" +
+						"30,150\n";
 
 		runTest(queryName, queryContent, expectedOutput, false); // Order might vary
 	}
@@ -315,7 +324,9 @@ public class BlazeDBTest {
 		String queryName = "test_sum_without_group_by";
 		String queryContent = "SELECT SUM(Student.C) FROM Student;";
 
-		String expectedOutput = "244\n";
+		String expectedOutput =
+				"sum(student.c)\n" +
+						"244\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -328,7 +339,9 @@ public class BlazeDBTest {
 		String queryName = "test_sum_count";
 		String queryContent = "SELECT SUM(1) FROM Student;";
 
-		String expectedOutput = "6\n";
+		String expectedOutput =
+				"sum(0)\n" +
+						"6\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -344,7 +357,9 @@ public class BlazeDBTest {
 		// Calculation:
 		// (85*30 + 22*40 + 19*20 + 21*40 + 65*30 + 32*10)
 		// = 2550 + 880 + 380 + 840 + 1950 + 320 = 6920
-		String expectedOutput = "6920\n";
+		String expectedOutput =
+				"sum(0)\n" +
+						"6920\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -358,10 +373,11 @@ public class BlazeDBTest {
 		String queryContent = "SELECT Student.D, SUM(Student.C) FROM Student GROUP BY Student.D ORDER BY Student.D;";
 
 		String expectedOutput =
-				"10, 32\n" +
-						"20, 19\n" +
-						"30, 150\n" +
-						"40, 43\n";
+				"d,sum(student.c)\n" +
+						"10,32\n" +
+						"20,19\n" +
+						"30,150\n" +
+						"40,43\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -375,7 +391,8 @@ public class BlazeDBTest {
 		String queryContent = "SELECT DISTINCT Student.D FROM Student ORDER BY Student.D;";
 
 		String expectedOutput =
-				"10\n" +
+				"d\n" +
+						"10\n" +
 						"20\n" +
 						"30\n" +
 						"40\n";
@@ -396,9 +413,10 @@ public class BlazeDBTest {
 		// Department 2: sum of grades 92+78 = 170
 		// Department 3: sum of grades 84+65 = 149
 		String expectedOutput =
-				"1, 176\n" +
-						"2, 170\n" +
-						"3, 149\n";
+				"h,sum(enrolled.k)\n" +
+						"1,176\n" +
+						"2,170\n" +
+						"3,149\n";
 
 		runTest(queryName, queryContent, expectedOutput, false); // Order might vary
 	}
@@ -417,8 +435,9 @@ public class BlazeDBTest {
 		// Student 1 (D=30) with enrollments to courses 101 (grade 85) and 102 (grade 92)
 		// Student 2 (D=40) with enrollments to courses 101 (grade 91) and 103 (grade 84)
 		String expectedOutput =
-						"2, 30, 101, 91\n" +
-						"2, 30, 103, 84\n";
+				"a,b,j,k\n" +
+						"2,30,101,91\n" +
+						"2,30,103,84\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 
@@ -441,8 +460,9 @@ public class BlazeDBTest {
 		// AND enrollments with K>80 (matches for Students 1, 2, 3)
 		// The intersection is just Student 2 with grades 91 and 84
 		String expectedOutput =
-				"2, 30, 201, 91\n" +
-						"2, 30, 203, 84\n";
+				"a,b,f,k\n" +
+						"2,30,201,91\n" +
+						"2,30,203,84\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -458,12 +478,13 @@ public class BlazeDBTest {
 
 		// Expected output has only the two projected columns (Student.A and Enrolled.K)
 		String expectedOutput =
-				"1, 85\n" +
-						"1, 92\n" +
-						"2, 91\n" +
-						"2, 84\n" +
-						"3, 78\n" +
-						"4, 65\n";
+				"a,k\n" +
+						"1,85\n" +
+						"1,92\n" +
+						"2,91\n" +
+						"2,84\n" +
+						"3,78\n" +
+						"4,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 
@@ -485,10 +506,11 @@ public class BlazeDBTest {
 		// Expected output has only Student.A, Student.C, Enrolled.K
 		// with the filters Student.D > 20 AND Enrolled.K > 80
 		String expectedOutput =
-				"1, 85, 85\n" +
-						"1, 85, 92\n" +
-						"2, 22, 91\n" +
-						"2, 22, 84\n";
+				"a,c,k\n" +
+						"1,85,85\n" +
+						"1,85,92\n" +
+						"2,22,91\n" +
+						"2,22,84\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -505,12 +527,13 @@ public class BlazeDBTest {
 
 		// Now Student.D is in both the SELECT list and ORDER BY clause
 		String expectedOutput =
-						"3, 20, 78\n" +   // Student.D = 20
-						"1, 30, 85\n" +   // Student.D = 30
-						"1, 30, 92\n" +
-						"2, 40, 91\n" +   // Student.D = 40
-						"2, 40, 84\n" +
-						"4, 40, 65\n";
+				"a,d,k\n" +
+						"3,20,78\n" +
+						"1,30,85\n" +
+						"1,30,92\n" +
+						"2,40,91\n" +
+						"2,40,84\n" +
+						"4,40,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -528,9 +551,10 @@ public class BlazeDBTest {
 		// Student.A is needed for the join condition but not in final result
 		// Enrolled.K is needed for SUM, Enrolled.I for the join condition
 		String expectedOutput =
-				"20, 78\n" +
-						"30, 177\n" +
-						"40, 240\n";
+				"d,sum(enrolled.k)\n" +
+						"20,78\n" +
+						"40,240\n" +
+						"30,177\n";
 
 		runTest(queryName, queryContent, expectedOutput, false); // Order might vary
 	}
@@ -550,9 +574,10 @@ public class BlazeDBTest {
 		// Enrolled.I and Enrolled.J for join conditions
 		// Course.E for join condition
 		String expectedOutput =
-				"2, 201\n" +
-						"2, 203\n" +
-						"4, 204\n";
+				"a,f\n" +
+						"2,201\n" +
+						"2,203\n" +
+						"4,204\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -568,7 +593,8 @@ public class BlazeDBTest {
 		// Student.A is in projection
 		// Student.D and Student.C are needed for selection
 		String expectedOutput =
-				"2\n" +
+				"a\n" +
+						"2\n" +
 						"4\n";
 
 		runTest(queryName, queryContent, expectedOutput);
@@ -584,9 +610,10 @@ public class BlazeDBTest {
 
 		// Should keep all columns since it's SELECT *
 		String expectedOutput =
-				"2, 30, 22, 40, 2, 101, 91\n" +
-						"2, 30, 22, 40, 2, 103, 84\n" +
-						"4, 40, 21, 40, 4, 104, 65\n";
+				"a,b,c,d,i,j,k\n" +
+						"2,30,22,40,2,101,91\n" +
+						"2,30,22,40,2,103,84\n" +
+						"4,40,21,40,4,104,65\n";
 
 		runTest(queryName, queryContent, expectedOutput);
 	}
@@ -604,9 +631,10 @@ public class BlazeDBTest {
 		// Student.C and Enrolled.K for SUM expression
 		// Student.A and Enrolled.I for join condition
 		String expectedOutput =
-				"20, 1482\n" +   // Student 3: 19 * 78 = 1482
-						"40, 5215\n" +  // Student 1: 85 * (85 + 92) = 15045
-						"30, 15045\n";    // Student 2: 22 * (91 + 84) + Student 4: 21 * 65 = 2919
+				"d,sum(0)\n" +
+						"20,1482\n" +
+						"40,5215\n" +
+						"30,15045\n";    // Student 2: 22 * (91 + 84) + Student 4: 21 * 65 = 2919
 
 		runTest(queryName, queryContent, expectedOutput, false); // Order might vary
 	}
@@ -816,26 +844,13 @@ public class BlazeDBTest {
 	}
 
 	/**
-	 * Creates the schema file for the test database.
-	 */
-	private void createSchemaFile() throws IOException {
-		String schema =
-				"Student A B C D\n" +
-						"Course E F G H\n" +
-						"Enrolled I J K\n" +
-						"Department L M N\n" +
-						"Faculty O P Q";
-
-		Files.write(Paths.get(TEST_DB_DIR, "schema.txt"), schema.getBytes(StandardCharsets.UTF_8));
-	}
-
-	/**
 	 * Creates sample Student data.
 	 * A: student ID, B: code representing name, C: age, D: GPA*10
 	 */
 	private void createStudentData() throws IOException {
 		String data =
-				"1, 25, 85, 30\n" +
+				"A, B, C, D\n" +
+						"1, 25, 85, 30\n" +
 						"2, 30, 22, 40\n" +
 						"3, 35, 19, 20\n" +
 						"4, 40, 21, 40\n" +
@@ -851,7 +866,8 @@ public class BlazeDBTest {
 	 */
 	private void createCourseData() throws IOException {
 		String data =
-				"101, 201, 3, 1\n" +
+				"E, F, G, H\n" +
+						"101, 201, 3, 1\n" +
 						"102, 202, 3, 2\n" +
 						"103, 203, 3, 3\n" +
 						"104, 204, 4, 3\n" +
@@ -867,7 +883,8 @@ public class BlazeDBTest {
 	 */
 	private void createEnrolledData() throws IOException {
 		String data =
-				"1, 101, 85\n" +
+				"I, J, K\n" +
+						"1, 101, 85\n" +
 						"1, 102, 92\n" +
 						"2, 101, 91\n" +
 						"2, 103, 84\n" +
@@ -883,7 +900,8 @@ public class BlazeDBTest {
 	 */
 	private void createDepartmentData() throws IOException {
 		String data =
-				"1, 301, 401\n" +
+				"L, M, N\n" +
+						"1, 301, 401\n" +
 						"2, 302, 402\n" +
 						"3, 303, 403";
 
@@ -896,7 +914,8 @@ public class BlazeDBTest {
 	 */
 	private void createFacultyData() throws IOException {
 		String data =
-				"1, 501, 1\n" +
+				"O, P, Q\n" +
+						"1, 501, 1\n" +
 						"2, 502, 1\n" +
 						"3, 503, 2\n" +
 						"4, 504, 2\n" +

@@ -331,20 +331,32 @@ public class DBCatalog {
      * Result-header names for a schema, in column order.
      * Plain columns are bare-ified (qualifier stripped: "student.a" -> "a");
      * aggregate keys (containing '(') are kept whole, lowercased.
+     * Schemas may contain alias keys (bare and qualified forms mapping to the
+     * same index), so column count is max index + 1, not map size; keys are
+     * visited in sorted order so the chosen name is deterministic.
      */
     public List<String> getOrderedColumnNames(String schemaId) {
         Map<String, Integer> schema = getSchema(schemaId);
         if (schema == null) {
             throw new QueryExecutionException("Unknown schema: " + schemaId);
         }
-        String[] names = new String[schema.size()];
-        for (Map.Entry<String, Integer> e : schema.entrySet()) {
-            String name = e.getKey().toLowerCase();
+        int width = 0;
+        for (Integer idx : schema.values()) {
+            if (idx + 1 > width) width = idx + 1;
+        }
+        String[] names = new String[width];
+        List<String> keys = new ArrayList<>(schema.keySet());
+        Collections.sort(keys);
+        for (String key : keys) {
+            int idx = schema.get(key);
+            String name = key.toLowerCase();
             if (!name.contains("(")) {
                 int dot = name.lastIndexOf('.');
                 if (dot >= 0) name = name.substring(dot + 1);
             }
-            names[e.getValue()] = name;
+            if (names[idx] == null) {
+                names[idx] = name;
+            }
         }
         return Arrays.asList(names);
     }
