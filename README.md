@@ -43,6 +43,8 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | Query optimisation (selection pushdown) | ✅ Supported |
 | Typed columns (int, string) | ✅ Supported |
 | CSV header support | ✅ Supported |
+| Query budgets (`--max-tuples`, `--timeout-ms`) | ✅ Supported |
+| `EXPLAIN` plan inspection | ✅ Supported |
 | Indexes | ❌ Not supported |
 | Transactions | ❌ Not supported |
 | INSERT / UPDATE / DELETE | ❌ Not supported |
@@ -89,8 +91,54 @@ cd java-query-engine
 ```bash
 java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.blazedb.BlazeDB \
-  samples/db samples/input/query1.sql output.csv
+  database_dir input_file output_file [--max-tuples=N] [--timeout-ms=N]
 ```
+
+Both `--max-tuples` and `--timeout-ms` are optional and independent. Omit either to impose no limit on that dimension.
+
+### Query budgets
+
+The engine enforces **total-work semantics**: every tuple emitted by any operator in the tree counts against the budget, including intermediate tuples that are later filtered or joined. A cross-product explosion that never produces output rows will still hit the tuple limit. The timeout clock starts lazily at the first tuple emission.
+
+When a budget is exceeded:
+- The partial output file is deleted.
+- `Error: <message>` is written to stderr.
+- The process exits with code 1.
+
+Both flags are optional and independent — you can use one, both, or neither.
+
+### EXPLAIN
+
+Prefix any query with `EXPLAIN` to inspect the query plan without executing it:
+
+```sql
+EXPLAIN SELECT Student.B, SUM(Student.C) FROM Student, Enrolled
+WHERE Student.D > 30 AND Student.A = Enrolled.A
+GROUP BY Student.B;
+```
+
+The output file receives a two-section plan:
+
+```
+=== Plan (as written) ===
+Aggregate[group by: Student.B; calls: SUM(Student.c)]
+  Project[Enrolled.A, Student.A, Student.B, Student.C, Student.D]
+    Select[Student.D > 30]
+      Join[Student.A = Enrolled.A]
+        Scan[Student]
+        Scan[Enrolled]
+
+=== Plan (optimized) ===
+Aggregate[group by: Student.B; calls: SUM(Student.c)]
+  Project[Enrolled.A, Student.A, Student.B, Student.C, Student.D]
+    Join[Student.A = Enrolled.A]
+      Select[Student.D > 30]
+        Scan[Student]
+      Project[Enrolled.A]
+        Scan[Enrolled]
+```
+
+No query execution occurs for EXPLAIN queries.
 
 ## Demo
 
@@ -118,6 +166,14 @@ SELECT * FROM Student WHERE Student.A < 3;
 java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.blazedb.BlazeDB \
   samples/db samples/input/query4.sql output.csv
+```
+
+To limit resource usage, add optional budget flags:
+
+```bash
+java -cp target/java-query-engine-1.0.0-jar-with-dependencies.jar \
+  com.github.jinba1.blazedb.BlazeDB \
+  samples/db samples/input/query4.sql output.csv --max-tuples=10000 --timeout-ms=5000
 ```
 
 **Output** (`output.csv`):
@@ -148,14 +204,14 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, and end-to-end integration scenarios (292 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, query budgets, EXPLAIN, and end-to-end integration scenarios (314 tests).
 
 ## Project Structure
 
 ```
-├── src/main/java/com/github/jinba1/blazedb/   # Core engine (31 files)
+├── src/main/java/com/github/jinba1/blazedb/   # Core engine (35 files)
 │   └── operator/                                # Volcano operators (10 files)
-├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests
+├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests (314 tests across 29 files)
 ├── samples/
 │   ├── db/data/                                 # CSV data files (header row + data rows)
 │   ├── input/query[1-20].sql                    # Sample queries
