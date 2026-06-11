@@ -49,7 +49,7 @@ public class BlazeDB {
 			}
 
 			List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
-			CSVFormat format = CSVFormat.RFC4180;
+			CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
 			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
 				printer.printRecord(headers);
 				Tuple tuple;
