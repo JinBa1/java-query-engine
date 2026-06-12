@@ -45,13 +45,34 @@ public class QueryPlanner {
     }
 
     /**
-     * Plans one query file. For EXPLAIN queries, renders the operator tree before and
-     * after optimization into {@link PlannedQuery#explainText()}; the returned root is
-     * the optimized, executable tree either way.
+     * Parses an SQL statement with explicit configuration and constructs a query plan.
+     * @param filename The path to a file containing a valid SQL query
+     * @param config The per-query planner configuration
+     * @return The root operator of the constructed query plan, or null if parsing fails
+     */
+    public static Operator parseStatement(String filename, QueryConfig config) {
+        return planQuery(filename, config).root();
+    }
+
+    /**
+     * Plans one query file under the production default configuration.
      * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
      * @return The planned query; root is null if parsing fails
      */
     public static PlannedQuery planQuery(String filename) {
+        return planQuery(filename, QueryConfig.defaults());
+    }
+
+    /**
+     * Plans one query file. For EXPLAIN queries, renders the operator tree before and
+     * after optimization into {@link PlannedQuery#explainText()}; the returned root is
+     * the optimized, executable tree either way.
+     * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
+     * @param config The per-query planner configuration
+     * @return The planned query; root is null if parsing fails
+     */
+    public static PlannedQuery planQuery(String filename, QueryConfig config) {
+        PlanContext ctx = new PlanContext(config);
         Operator rootOp = null;
         boolean explain = false;
         try {
@@ -66,7 +87,7 @@ public class QueryPlanner {
             }
 
             if (select != null) {
-                rootOp = buildOperatorTree(select);
+                rootOp = buildOperatorTree(ctx, select);
             }
         } catch (QueryExecutionException e) {
             throw e;
@@ -81,8 +102,8 @@ public class QueryPlanner {
         String beforeText = (explain && rootOp != null) ? PlanPrinter.print(rootOp) : null;
 
         // Apply query optimization if enabled (skip when planning failed: root is null)
-        if (Constants.useQueryOptimization && rootOp != null) {
-            rootOp = QueryPlanOptimizer.optimize(rootOp);
+        if (config.useQueryOptimization() && rootOp != null) {
+            rootOp = QueryPlanOptimizer.optimize(ctx, rootOp);
         }
 
         String explainText = null;
@@ -99,31 +120,32 @@ public class QueryPlanner {
      * in parseStatement): scan, joins/selection, aggregation, projection, distinct/order,
      * limit.
      */
-    private static Operator buildOperatorTree(Select select) {
-        Operator rootOp = createScanOperator(select);
+    private static Operator buildOperatorTree(PlanContext ctx, Select select) {
+        Operator rootOp = createScanOperator(ctx, select);
 
         if (existJoinOp(select)) {
-            rootOp = processJoins(rootOp, select);
+            rootOp = processJoins(ctx, rootOp, select);
         } else if (existSelectOp(select)) {
-            rootOp = new SelectOperator(rootOp, select.getPlainSelect().getWhere());
+            rootOp = new SelectOperator(ctx, rootOp, select.getPlainSelect().getWhere());
         }
 
-        rootOp = processGroupByAndAggregation(rootOp, select);
-        rootOp = processProjection(rootOp, select);
-        rootOp = processDistinctAndOrderBy(rootOp, select);
-        rootOp = processLimit(rootOp, select);
+        rootOp = processGroupByAndAggregation(ctx, rootOp, select);
+        rootOp = processProjection(ctx, rootOp, select);
+        rootOp = processDistinctAndOrderBy(ctx, rootOp, select);
+        rootOp = processLimit(ctx, rootOp, select);
 
         return rootOp;
     }
 
     /**
      * Creates a scan operator for the first table in the FROM clause.
+     * @param ctx The per-query context
      * @param select The SQL SELECT statement
      * @return A ScanOperator for the first table
      */
-    private static Operator createScanOperator(Select select) {
+    private static Operator createScanOperator(PlanContext ctx, Select select) {
         Table firstTable = (Table) select.getPlainSelect().getFromItem();
-        return new ScanOperator(firstTable.getName());
+        return new ScanOperator(ctx, firstTable.getName());
     }
 
     /**
@@ -135,7 +157,7 @@ public class QueryPlanner {
      * @param select The SELECT statement being processed
      * @return The root operator of the join tree
      */
-    private static Operator processJoins(Operator rootOp, Select select) {
+    private static Operator processJoins(PlanContext ctx, Operator rootOp, Select select) {
         ExpressionPreprocessor preprocessor = new ExpressionPreprocessor();
 
         Expression whereExpression = select.getPlainSelect().getWhere();
@@ -162,11 +184,11 @@ public class QueryPlanner {
         for (Table table : tables) {
             Expression joinCondition = findJoinCondition(joinExpressions, joinedTableNames, table);
 
-            Operator rightOp = new ScanOperator(table.getName());
-            if (Constants.useHashJoin && HashJoinOperator.hasEquiConjunct(joinCondition)) {
-                rootOp = new HashJoinOperator(rootOp, rightOp, joinCondition);
+            Operator rightOp = new ScanOperator(ctx, table.getName());
+            if (ctx.config().useHashJoin() && HashJoinOperator.hasEquiConjunct(joinCondition)) {
+                rootOp = new HashJoinOperator(ctx, rootOp, rightOp, joinCondition);
             } else {
-                rootOp = new JoinOperator(rootOp, rightOp, joinCondition);
+                rootOp = new JoinOperator(ctx, rootOp, rightOp, joinCondition);
             }
 
             joinedTableNames.add(table.getName());
@@ -175,7 +197,7 @@ public class QueryPlanner {
 
         // Add any remaining selection conditions after joins
         if (!selectExpressions.isEmpty()) {
-            rootOp = new SelectOperator(rootOp, combineExpression(selectExpressions));
+            rootOp = new SelectOperator(ctx, rootOp, combineExpression(selectExpressions));
         }
 
         return rootOp;
@@ -188,7 +210,7 @@ public class QueryPlanner {
      * @param select The SELECT statement being processed
      * @return Updated operator tree with aggregation
      */
-    private static Operator processGroupByAndAggregation(Operator rootOp, Select select) {
+    private static Operator processGroupByAndAggregation(PlanContext ctx, Operator rootOp, Select select) {
         validateAggregateQuery(select);
 
         boolean hasGroupBy = existGroupByOp(select);
@@ -211,10 +233,10 @@ public class QueryPlanner {
             sortedColumns.sort(Comparator
                     .comparing((Column c) -> c.getTable() != null ? c.getTable().getName() : "")
                     .thenComparing(Column::getColumnName));
-            rootOp = new ProjectOperator(rootOp, sortedColumns);
+            rootOp = new ProjectOperator(ctx, rootOp, sortedColumns);
         }
 
-        return new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
+        return new AggregateOperator(ctx, rootOp, groupByColumns, aggregateCalls, outputColumns);
     }
 
     /**
@@ -224,10 +246,10 @@ public class QueryPlanner {
      * @param select The SELECT statement being processed
      * @return Updated operator tree with projection
      */
-    private static Operator processProjection(Operator rootOp, Select select) {
+    private static Operator processProjection(PlanContext ctx, Operator rootOp, Select select) {
         // Add projection if needed (only if not GROUP BY or aggregate or if SELECT *)
         if (existProjectOp(select) && !existAggregate(select) && !existGroupByOp(select)) {
-            rootOp = new ProjectOperator(rootOp, getProjectCols(select));
+            rootOp = new ProjectOperator(ctx, rootOp, getProjectCols(select));
         }
 
         return rootOp;
@@ -240,15 +262,15 @@ public class QueryPlanner {
      * @param select The SELECT statement being processed
      * @return Updated operator tree with DISTINCT and/or ORDER BY
      */
-    private static Operator processDistinctAndOrderBy(Operator rootOp, Select select) {
+    private static Operator processDistinctAndOrderBy(PlanContext ctx, Operator rootOp, Select select) {
         // Add DISTINCT if needed
         if (existDistinctOp(select)) {
-            rootOp = new DuplicateEliminationOperator(rootOp);
+            rootOp = new DuplicateEliminationOperator(ctx, rootOp);
         }
 
         // Add ORDER BY if needed
         if (existSortOp(select)) {
-            rootOp = new SortOperator(rootOp, getSortCols(select));
+            rootOp = new SortOperator(ctx, rootOp, getSortCols(select));
         }
 
         return rootOp;
@@ -258,7 +280,7 @@ public class QueryPlanner {
      * Applies the LIMIT clause, if present, as the topmost operator.
      * Only plain "LIMIT n" with a non-negative integer literal is supported.
      */
-    private static Operator processLimit(Operator rootOp, Select select) {
+    private static Operator processLimit(PlanContext ctx, Operator rootOp, Select select) {
         Limit limit = select.getLimit();
         if (limit == null) {
             return rootOp;
@@ -275,7 +297,7 @@ public class QueryPlanner {
                     "LIMIT requires a non-negative integer literal; got '"
                             + limit.getRowCount() + "'");
         }
-        return new LimitOperator(rootOp, rowCount.getValue());
+        return new LimitOperator(ctx, rootOp, rowCount.getValue());
     }
 
     /**

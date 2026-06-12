@@ -3,6 +3,7 @@ package com.github.jinba1.blazedb.operator;
 import com.github.jinba1.blazedb.ColumnType;
 import com.github.jinba1.blazedb.DBCatalog;
 import com.github.jinba1.blazedb.IntValue;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.StringValue;
 import com.github.jinba1.blazedb.Tuple;
@@ -38,7 +39,8 @@ public class ScanOperator extends Operator {
      * Construct a scan operator for the given table.
      * @param tableName The name of the database table this operator scans.
      */
-    public ScanOperator(String tableName) {
+    public ScanOperator(PlanContext ctx, String tableName) {
+        super(ctx);
         this.tableName = tableName;
         tablePath = DBCatalog.getInstance().getDBLocation(tableName);
         this.columnTypes = DBCatalog.getInstance().getColumnTypes(tableName);

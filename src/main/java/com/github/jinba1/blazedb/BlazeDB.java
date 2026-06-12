@@ -62,7 +62,7 @@ public class BlazeDB {
 		try {
 			DBCatalog.resetDBCatalog();
 			DBCatalog.initDBCatalog(args[0]);
-			PlannedQuery planned = QueryPlanner.planQuery(args[1]);
+			PlannedQuery planned = QueryPlanner.planQuery(args[1], QueryConfig.defaults());
 
 			if (planned.explainText() != null) {
 				// EXPLAIN: write the plan text, execute nothing; budgets don't apply
@@ -115,7 +115,7 @@ public class BlazeDB {
 			}
 		}
 
-		List<String> headers = DBCatalog.getInstance().getOrderedColumnNames(root.propagateSchemaId());
+		List<String> headers = root.getContext().getOrderedColumnNames(root.propagateSchemaId());
 		CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
 		try {
 			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {

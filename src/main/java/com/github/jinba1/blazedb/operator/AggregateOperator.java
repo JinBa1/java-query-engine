@@ -34,9 +34,6 @@ public class AggregateOperator extends Operator {
     // Flag to track if all input has been processed
     private boolean processed;
 
-    private String intermediateSchemaId;
-    private boolean schemaRegistered = false;
-
     /**
      * Constructs an AggregateOperator with the specified child operator, grouping columns,
      * aggregate calls, and output columns.
@@ -45,8 +42,9 @@ public class AggregateOperator extends Operator {
      * @param aggregateCalls The aggregate calls (SUM/COUNT/AVG/MIN/MAX) in SELECT-list order
      * @param outputColumns The columns to include in the output (subset of groupByColumns)
      */
-    public AggregateOperator(Operator child, List<Column> groupByColumns,
+    public AggregateOperator(PlanContext ctx, Operator child, List<Column> groupByColumns,
                              List<AggregateCall> aggregateCalls, List<Column> outputColumns) {
+        super(ctx);
         this.child = child;
         this.groupByColumns = groupByColumns;
         this.aggregateCalls = aggregateCalls;
@@ -63,7 +61,7 @@ public class AggregateOperator extends Operator {
 
         String schemaId = child.propagateSchemaId();
         for (int i = 0; i < aggregateCalls.size(); i++) {
-            this.evaluators.add(new ExpressionEvaluator(schemaId));
+            this.evaluators.add(new ExpressionEvaluator(ctx, schemaId));
         }
 
         resolveColumnIndices();
@@ -251,7 +249,7 @@ public class AggregateOperator extends Operator {
                 resultSchema.put(key, colIndex);
 
                 // Record source column
-                Integer sourceIndex = DBCatalog.getInstance().resolveColumnWithOrigins(childSchemaId, tableName, columnName);
+                Integer sourceIndex = ctx.resolveColumnWithOrigins(childSchemaId, tableName, columnName);
                 if (sourceIndex == null) {
                     throw new RuntimeException("Column " + tableName + "." + columnName +
                             " not found in schema " + childSchemaId);
@@ -271,7 +269,7 @@ public class AggregateOperator extends Operator {
         }
 
         // Register schema
-        intermediateSchemaId = DBCatalog.getInstance().registerSchemaWithTransformation(
+        intermediateSchemaId = ctx.registerSchemaWithTransformation(
                 resultSchema,
                 childSchemaId,
                 SchemaTransformationType.AGGREGATION,

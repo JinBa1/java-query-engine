@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.Tuple;
 
 import java.util.HashMap;
@@ -21,7 +22,8 @@ public class LimitOperator extends Operator {
      * @param child The child operator from which to read tuples
      * @param limit The maximum number of tuples to emit (non-negative)
      */
-    public LimitOperator(Operator child, long limit) {
+    public LimitOperator(PlanContext ctx, Operator child, long limit) {
+        super(ctx);
         this.child = child;
         this.limit = limit;
         this.child.ensureSchemaRegistered();

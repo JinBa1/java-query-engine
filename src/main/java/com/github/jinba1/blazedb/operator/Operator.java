@@ -1,7 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
-import com.github.jinba1.blazedb.Constants;
-import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
 import com.github.jinba1.blazedb.SchemaTransformationType;
 import com.github.jinba1.blazedb.Tuple;
@@ -34,6 +33,18 @@ public abstract class Operator {
 
     // Per-query execution budget; null means unlimited (default)
     protected QueryBudget budget = null;
+
+    // Per-query context: schema registry + config. Never null.
+    protected final PlanContext ctx;
+
+    protected Operator(PlanContext ctx) {
+        this.ctx = ctx;
+    }
+
+    /** The per-query context this operator was planned under. */
+    public final PlanContext getContext() {
+        return ctx;
+    }
 
     /**
      * Retrieves the next tuple from the iterator.
@@ -166,8 +177,8 @@ public abstract class Operator {
      * @return A list of resolved column indices, either the provided targetList or a new ArrayList
      * @throws RuntimeException If any column cannot be resolved in the specified schema
      */
-    protected static List<Integer> resolveColumnIndices(List<Column> columns, String schemaId,
-                                                        List<Integer> targetList) {
+    protected List<Integer> resolveColumnIndices(List<Column> columns, String schemaId,
+                                                 List<Integer> targetList) {
         List<Integer> indices = targetList != null ? targetList : new ArrayList<>();
         if (targetList != null) {
             targetList.clear();
@@ -177,7 +188,7 @@ public abstract class Operator {
             String tableName = column.getTable().getName();
             String columnName = column.getColumnName();
 
-            Integer index = DBCatalog.getInstance().resolveColumnWithOrigins(schemaId, tableName, columnName);
+            Integer index = ctx.resolveColumnWithOrigins(schemaId, tableName, columnName);
             if (index == null) {
                 throw new RuntimeException("Column " + tableName + "." + columnName +
                         " not found in schema " + schemaId);
@@ -200,19 +211,13 @@ public abstract class Operator {
             Map<String, String> transformationDetails) {
 
         String childSchemaId = child.propagateSchemaId();
-        Map<String, Integer> childSchema;
-
-        if (childSchemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
-            childSchema = DBCatalog.getInstance().getIntermediateSchema(childSchemaId);
-        } else {
-            childSchema = DBCatalog.getInstance().getDBSchemata(childSchemaId);
-        }
+        Map<String, Integer> childSchema = ctx.getSchema(childSchemaId);
 
         // Create identical schema structure
         Map<String, Integer> newSchema = new HashMap<>(childSchema);
 
         // Register with transformation details
-        return DBCatalog.getInstance().registerSchemaWithTransformation(
+        return ctx.registerSchemaWithTransformation(
                 newSchema,
                 childSchemaId,
                 SchemaTransformationType.OTHER,

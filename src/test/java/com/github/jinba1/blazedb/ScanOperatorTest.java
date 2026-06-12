@@ -26,6 +26,8 @@ public class ScanOperatorTest {
     @TempDir
     Path tempDb;
 
+    private PlanContext ctx;
+
     private void writeTable(String name, String... lines) throws IOException {
         Path data = tempDb.resolve("data");
         Files.createDirectories(data);
@@ -58,6 +60,7 @@ public class ScanOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -72,7 +75,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_ReadsAllTuples() {
         // Create scan operator for test table
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Read all tuples and verify count
         int count = 0;
@@ -87,7 +90,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_TupleValues() {
         // Create scan operator for test table
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Get first tuple and check values
         Tuple tuple = scanOp.getNextTuple();
@@ -102,7 +105,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_Reset() {
         // Create scan operator for test table
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Read first tuple
         Tuple firstTuple = scanOp.getNextTuple();
@@ -128,7 +131,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_EmptyTable() {
         // Create scan operator for empty table
-        ScanOperator scanOp = new ScanOperator(EMPTY_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, EMPTY_TABLE);
 
         // Try to read - should return null immediately
         Tuple tuple = scanOp.getNextTuple();
@@ -138,7 +141,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_ReadAllTuplesTwice() {
         // Create scan operator for test table
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Read all tuples first time
         int count1 = 0;
@@ -162,7 +165,7 @@ public class ScanOperatorTest {
     @Test
     public void testScanOperator_ResourceClosure() {
         // Create and immediately close scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         scanOp.close();
 
         // After closing, getNextTuple should gracefully handle the situation
@@ -175,7 +178,7 @@ public class ScanOperatorTest {
         writeTable("People", "id,name", "1,alice", "2,\"smith, bob\"");
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
-        ScanOperator scan = new ScanOperator("People");
+        ScanOperator scan = new ScanOperator(ctx, "People");
         assertEquals(new Tuple(List.of(new IntValue(1), new StringValue("alice"))), scan.getNextTuple());
         assertEquals(new Tuple(List.of(new IntValue(2), new StringValue("smith, bob"))), scan.getNextTuple());
         assertNull(scan.getNextTuple());
@@ -187,7 +190,7 @@ public class ScanOperatorTest {
         writeTable("T", "a", "7");
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
-        ScanOperator scan = new ScanOperator("T");
+        ScanOperator scan = new ScanOperator(ctx, "T");
         assertEquals(new IntValue(7), scan.getNextTuple().getAttribute(0));
         scan.reset();
         assertEquals(new IntValue(7), scan.getNextTuple().getAttribute(0));

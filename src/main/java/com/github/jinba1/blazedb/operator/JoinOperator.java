@@ -32,7 +32,8 @@ public class JoinOperator extends Operator {
      * @param innerChild The inner (right) child operator, scanned multiple times.
      * @param expression The join condition expression, or null for cross product.
      */
-    public JoinOperator(Operator outerChild, Operator innerChild, Expression expression) {
+    public JoinOperator(PlanContext ctx, Operator outerChild, Operator innerChild, Expression expression) {
+        super(ctx);
         this.child = innerChild;
         this.outerChild = outerChild;
         this.expression = expression;
@@ -42,7 +43,7 @@ public class JoinOperator extends Operator {
 
         registerSchema();
 
-        this.evaluator = new ExpressionEvaluator(intermediateSchemaId);
+        this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
     }
     /**
      * Returns the next tuple in the join result.
@@ -169,7 +170,7 @@ public class JoinOperator extends Operator {
 
         // Update schema ID for the evaluator
         if (this.intermediateSchemaId != null) {
-            this.evaluator = new ExpressionEvaluator(intermediateSchemaId);
+            this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
         }
     }
 
@@ -212,7 +213,7 @@ public class JoinOperator extends Operator {
         }
 
         // Register with transformation details
-        intermediateSchemaId = DBCatalog.getInstance().registerSchemaWithTransformation(
+        intermediateSchemaId = ctx.registerSchemaWithTransformation(
                 joinedSchema,
                 null, // No single parent
                 SchemaTransformationType.JOIN,
@@ -220,9 +221,8 @@ public class JoinOperator extends Operator {
         );
 
         // Register both parents
-        DBCatalog catalog = DBCatalog.getInstance();
-        catalog.addParentSchema(intermediateSchemaId, leftSchemaId);
-        catalog.addParentSchema(intermediateSchemaId, rightSchemaId);
+        ctx.addParentSchema(intermediateSchemaId, leftSchemaId);
+        ctx.addParentSchema(intermediateSchemaId, rightSchemaId);
         schemaRegistered = true;
     }
 
@@ -233,11 +233,7 @@ public class JoinOperator extends Operator {
      * @return A map from column names to indices for the specified schema
      */
     private Map<String, Integer> getSchemaMap(String schemaId) {
-        if (schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
-            return DBCatalog.getInstance().getIntermediateSchema(schemaId);
-        } else {
-            return DBCatalog.getInstance().getDBSchemata(schemaId);
-        }
+        return ctx.getSchema(schemaId);
     }
 
     /**\
@@ -260,7 +256,7 @@ public class JoinOperator extends Operator {
         String originalTableName = null;
         if (sourceSchemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
             // Try to find original table through parent schemas
-            String parentId = DBCatalog.getInstance().getParentSchemaId(sourceSchemaId);
+            String parentId = ctx.getParentSchemaId(sourceSchemaId);
             if (parentId != null && !parentId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
                 originalTableName = parentId;
             }
@@ -334,7 +330,7 @@ public class JoinOperator extends Operator {
 
         // MISSING STEP: Update join condition expressions to match new schema
         // Create a new evaluator with the updated schema
-        this.evaluator = new ExpressionEvaluator(intermediateSchemaId);
+        this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
 
     }
 }

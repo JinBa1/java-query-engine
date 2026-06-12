@@ -27,6 +27,8 @@ public class ProjectOperatorTest {
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         // Create test database directory structure
@@ -45,6 +47,7 @@ public class ProjectOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -58,7 +61,7 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectSingleColumn() {
         // Test projecting a single column (sid)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column object for sid
         List<Column> projectedColumns = new ArrayList<>();
@@ -69,7 +72,7 @@ public class ProjectOperatorTest {
         sidColumn.setColumnName("sid");
         projectedColumns.add(sidColumn);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         // Should keep only the sid column for all tuples
         List<Tuple> projectedTuples = new ArrayList<>();
@@ -96,7 +99,7 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectMultipleColumns() {
         // Test projecting multiple columns (sid and gpa)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column objects for sid and gpa
         List<Column> projectedColumns = new ArrayList<>();
@@ -113,7 +116,7 @@ public class ProjectOperatorTest {
         gpaColumn.setColumnName("gpa");
         projectedColumns.add(gpaColumn);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         // Should keep only the sid and gpa columns for all tuples
         Tuple tuple = projectOp.getNextTuple();
@@ -138,7 +141,7 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectReordering() {
         // Test projecting columns in a different order (gpa then sid)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column objects for gpa and sid (reversed order)
         List<Column> projectedColumns = new ArrayList<>();
@@ -155,7 +158,7 @@ public class ProjectOperatorTest {
         sidColumn.setColumnName("sid");
         projectedColumns.add(sidColumn);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         Tuple tuple = projectOp.getNextTuple();
         assertNotNull(tuple, "Should return a projected tuple");
@@ -171,12 +174,12 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectAfterSelect() {
         // Test project after select to ensure they work together
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Select students with gpa=4
             Expression expr = CCJSqlParserUtil.parseExpression("Student.gpa = 4");
-            SelectOperator selectOp = new SelectOperator(scanOp, expr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
             // Project only sid
             List<Column> projectedColumns = new ArrayList<>();
@@ -187,7 +190,7 @@ public class ProjectOperatorTest {
             sidColumn.setColumnName("sid");
             projectedColumns.add(sidColumn);
 
-            ProjectOperator projectOp = new ProjectOperator(selectOp, projectedColumns);
+            ProjectOperator projectOp = new ProjectOperator(ctx, selectOp, projectedColumns);
 
             // Should return two projected tuples (for students 2 and 4)
             List<Value> projectedSids = new ArrayList<>();
@@ -212,7 +215,7 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectDuplicates() {
         // Test projecting the same column multiple times
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column objects for sid (twice)
         List<Column> projectedColumns = new ArrayList<>();
@@ -229,7 +232,7 @@ public class ProjectOperatorTest {
         sidColumn2.setColumnName("sid");
         projectedColumns.add(sidColumn2);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         Tuple tuple = projectOp.getNextTuple();
         assertNotNull(tuple, "Should return a projected tuple");
@@ -245,7 +248,7 @@ public class ProjectOperatorTest {
     @Test
     public void testReset() {
         // Test reset functionality
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column objects for sid and gpa
         List<Column> projectedColumns = new ArrayList<>();
@@ -262,7 +265,7 @@ public class ProjectOperatorTest {
         gpaColumn.setColumnName("gpa");
         projectedColumns.add(gpaColumn);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         // Read all tuples first time
         List<Tuple> firstRunTuples = new ArrayList<>();
@@ -299,10 +302,10 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectNoColumns() {
         // Edge case: projecting no columns
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         List<Column> projectedColumns = new ArrayList<>(); // Empty list
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         Tuple tuple = projectOp.getNextTuple();
         assertNotNull(tuple, "Should still return tuples");
@@ -314,7 +317,7 @@ public class ProjectOperatorTest {
     @Test
     public void testProjectEveryColumn() {
         // Test projecting all columns in original order
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create all Column objects
         List<Column> projectedColumns = new ArrayList<>();
@@ -341,7 +344,7 @@ public class ProjectOperatorTest {
         gpaColumn.setColumnName("gpa");
         projectedColumns.add(gpaColumn);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         Tuple tuple = projectOp.getNextTuple();
         assertNotNull(tuple, "Should return a projected tuple");

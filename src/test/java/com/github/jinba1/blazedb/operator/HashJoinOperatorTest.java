@@ -1,7 +1,9 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
+import com.github.jinba1.blazedb.QueryConfig;
 import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Tuple;
 import net.sf.jsqlparser.expression.Expression;
@@ -27,6 +29,8 @@ public class HashJoinOperatorTest {
     @TempDir
     Path tempDb;
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         Path data = tempDb.resolve("data");
@@ -43,6 +47,7 @@ public class HashJoinOperatorTest {
         // E: header-only empty table, same shape as R
         Files.write(data.resolve("E.csv"), List.of("k,w"));
         initCatalog();
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     private void initCatalog() {
@@ -66,11 +71,11 @@ public class HashJoinOperatorTest {
     /** Same join through both algorithms; sequences must match exactly. Returns the rows. */
     private List<String> assertEquivalent(String outer, String inner, String condition) throws Exception {
         initCatalog();
-        List<String> nlj = drain(new JoinOperator(
-                new ScanOperator(outer), new ScanOperator(inner), cond(condition)));
+        List<String> nlj = drain(new JoinOperator(ctx, 
+                new ScanOperator(ctx, outer), new ScanOperator(ctx, inner), cond(condition)));
         initCatalog();
-        List<String> hash = drain(new HashJoinOperator(
-                new ScanOperator(outer), new ScanOperator(inner), cond(condition)));
+        List<String> hash = drain(new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, outer), new ScanOperator(ctx, inner), cond(condition)));
         assertEquals(nlj, hash, "hash join must replicate nested-loop output exactly");
         return nlj;
     }
@@ -116,8 +121,8 @@ public class HashJoinOperatorTest {
 
     @Test
     public void resetReplaysIdentically() throws Exception {
-        HashJoinOperator join = new HashJoinOperator(
-                new ScanOperator("L"), new ScanOperator("R"), cond("L.k = R.k"));
+        HashJoinOperator join = new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "R"), cond("L.k = R.k"));
         List<String> first = drain(join);
         join.reset();
         assertEquals(first, drain(join));
@@ -126,15 +131,15 @@ public class HashJoinOperatorTest {
     @Test
     public void hashJoinChargesLessTotalWorkThanNestedLoop() throws Exception {
         initCatalog();
-        JoinOperator nlj = new JoinOperator(
-                new ScanOperator("L"), new ScanOperator("R"), cond("L.k = R.k"));
+        JoinOperator nlj = new JoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "R"), cond("L.k = R.k"));
         QueryBudget nljBudget = new QueryBudget(null, null);
         nlj.attachBudget(nljBudget);
         drain(nlj);
 
         initCatalog();
-        HashJoinOperator hash = new HashJoinOperator(
-                new ScanOperator("L"), new ScanOperator("R"), cond("L.k = R.k"));
+        HashJoinOperator hash = new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "R"), cond("L.k = R.k"));
         QueryBudget hashBudget = new QueryBudget(null, null);
         hash.attachBudget(hashBudget);
         drain(hash);
@@ -145,8 +150,8 @@ public class HashJoinOperatorTest {
 
     @Test
     public void nonEquiConditionFailsLoudly() throws Exception {
-        HashJoinOperator join = new HashJoinOperator(
-                new ScanOperator("L"), new ScanOperator("R"), cond("L.v > R.w"));
+        HashJoinOperator join = new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "R"), cond("L.v > R.w"));
         QueryExecutionException ex = assertThrows(QueryExecutionException.class, join::getNextTuple);
         assertTrue(ex.getMessage().contains("equality"), ex.getMessage());
     }
@@ -155,16 +160,16 @@ public class HashJoinOperatorTest {
     public void crossTypeJoinKeyFailsLoudly() throws Exception {
         // L.k is INT, M.k is STRING — nested loop throws on evaluation;
         // hash must be equally loud, not silently empty
-        HashJoinOperator join = new HashJoinOperator(
-                new ScanOperator("L"), new ScanOperator("M"), cond("L.k = M.k"));
+        HashJoinOperator join = new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "M"), cond("L.k = M.k"));
         QueryExecutionException ex = assertThrows(QueryExecutionException.class, () -> drain(join));
         assertTrue(ex.getMessage().toLowerCase().contains("type"), ex.getMessage());
     }
 
     @Test
     public void describeShowsAlgorithm() throws Exception {
-        HashJoinOperator join = new HashJoinOperator(
-                new ScanOperator("L"), new ScanOperator("R"), cond("L.k = R.k"));
+        HashJoinOperator join = new HashJoinOperator(ctx, 
+                new ScanOperator(ctx, "L"), new ScanOperator(ctx, "R"), cond("L.k = R.k"));
         assertEquals("HashJoin[L.k = R.k]", join.describe());
     }
 

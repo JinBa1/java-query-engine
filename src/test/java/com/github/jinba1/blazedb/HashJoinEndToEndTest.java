@@ -48,17 +48,13 @@ public class HashJoinEndToEndTest {
 
     @Test
     public void flagDisabledFallsBackToNestedLoop() throws IOException {
-        boolean original = Constants.useHashJoin;
-        Constants.useHashJoin = false;
-        try {
-            PlannedQuery planned = planFile(
-                    "EXPLAIN SELECT * FROM Sales, Reps WHERE Sales.region = Reps.region;");
-            assertFalse(planned.explainText().contains("HashJoin"), planned.explainText());
-            assertTrue(planned.explainText().contains("Join[Sales.region = Reps.region]"),
-                    planned.explainText());
-        } finally {
-            Constants.useHashJoin = original;
-        }
+        Path q = tempDb.resolve("q-" + System.nanoTime() + ".sql");
+        Files.writeString(q,
+                "EXPLAIN SELECT * FROM Sales, Reps WHERE Sales.region = Reps.region;");
+        PlannedQuery planned = QueryPlanner.planQuery(q.toString(), new QueryConfig(true, false));
+        assertFalse(planned.explainText().contains("HashJoin"), planned.explainText());
+        assertTrue(planned.explainText().contains("Join[Sales.region = Reps.region]"),
+                planned.explainText());
     }
 
     @Test

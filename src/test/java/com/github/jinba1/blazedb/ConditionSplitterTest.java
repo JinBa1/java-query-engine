@@ -26,6 +26,7 @@ public class ConditionSplitterTest {
 
     private String outerSchemaId;
     private String innerSchemaId;
+    private PlanContext ctx;
 
     @BeforeEach
     public void setUp() throws IOException {
@@ -43,6 +44,7 @@ public class ConditionSplitterTest {
 
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
 
         Map<String, Integer> outerSchema = new HashMap<>();
         outerSchema.put("Student.sid", 0);
@@ -66,9 +68,9 @@ public class ConditionSplitterTest {
         innerDetails.put("Course.sid", "Course.sid");
         innerDetails.put("Course.grade", "Course.grade");
 
-        outerSchemaId = DBCatalog.getInstance().registerSchemaWithTransformation(
+        outerSchemaId = ctx.registerSchemaWithTransformation(
                 outerSchema, OUTER_TABLE, SchemaTransformationType.PROJECTION, outerDetails);
-        innerSchemaId = DBCatalog.getInstance().registerSchemaWithTransformation(
+        innerSchemaId = ctx.registerSchemaWithTransformation(
                 innerSchema, INNER_TABLE, SchemaTransformationType.PROJECTION, innerDetails);
     }
 
@@ -82,7 +84,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testPureOuterSelection() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.age > 20");
         expr.accept(splitter);
 
@@ -93,7 +95,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testPureInnerSelection() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression("Course.grade >= 80");
         expr.accept(splitter);
 
@@ -104,7 +106,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testJoinCondition() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.sid = Course.sid");
         expr.accept(splitter);
 
@@ -115,7 +117,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testMixedAndExpression() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression(
                 "Student.sid = Course.sid AND Student.age > 20 AND Course.grade >= 80");
         expr.accept(splitter);
@@ -127,7 +129,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testNoConditions() {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
 
         assertNull(splitter.getOuterCondition());
         assertNull(splitter.getInnerCondition());
@@ -136,7 +138,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testMultipleOuterSelections() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression(
                 "Student.age > 20 AND Student.gpa >= 3");
         expr.accept(splitter);
@@ -151,7 +153,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testComplexNestedAnd() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression(
                 "Student.sid = Course.sid AND Student.age > 20 AND Course.grade >= 80 AND Student.gpa >= 3");
         expr.accept(splitter);
@@ -167,7 +169,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testNotEqualsJoinCondition() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.sid != Course.sid");
         expr.accept(splitter);
 
@@ -178,7 +180,7 @@ public class ConditionSplitterTest {
 
     @Test
     public void testGreaterThanJoinCondition() throws Exception {
-        ConditionSplitter splitter = new ConditionSplitter(outerSchemaId, innerSchemaId);
+        ConditionSplitter splitter = new ConditionSplitter(ctx, outerSchemaId, innerSchemaId);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.sid > Course.cid");
         expr.accept(splitter);
 

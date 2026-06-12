@@ -15,6 +15,7 @@ public class CachedOperator extends Operator {
     private int position = 0;
 
     public CachedOperator(Operator source) {
+        super(source.getContext());
         source.ensureSchemaRegistered();
         this.intermediateSchemaId = source.propagateSchemaId();
         this.schemaRegistered = true;

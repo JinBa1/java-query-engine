@@ -29,6 +29,8 @@ public class JoinOperatorTest {
     private static final String ENROLLED_TABLE = "Enrolled";
     private static final String EMPTY_TABLE = "EmptyTable";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         // Create test database directory structure
@@ -70,6 +72,7 @@ public class JoinOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -86,11 +89,11 @@ public class JoinOperatorTest {
     @Test
     public void testSimpleEquiJoin() throws Exception {
         // Test equi-join: Students.sid = Enrolled.sid
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp = new ScanOperator(ctx, ENROLLED_TABLE);
 
         Expression joinCondition = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator joinOp = new JoinOperator(studentsOp, enrolledOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, enrolledOp, joinCondition);
 
         // Count the number of joined tuples - should match the number of enrollments
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -113,16 +116,16 @@ public class JoinOperatorTest {
     @Test
     public void testJoinWithPredicates() throws Exception {
         // First apply selection to both tables, then join
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
         Expression studentFilter = CCJSqlParserUtil.parseExpression("Students.gpa > 2");
-        SelectOperator filteredStudentsOp = new SelectOperator(studentsOp, studentFilter);
+        SelectOperator filteredStudentsOp = new SelectOperator(ctx, studentsOp, studentFilter);
 
-        ScanOperator enrolledOp = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator enrolledOp = new ScanOperator(ctx, ENROLLED_TABLE);
         Expression enrolledFilter = CCJSqlParserUtil.parseExpression("Enrolled.grade > 80");
-        SelectOperator filteredEnrolledOp = new SelectOperator(enrolledOp, enrolledFilter);
+        SelectOperator filteredEnrolledOp = new SelectOperator(ctx, enrolledOp, enrolledFilter);
 
         Expression joinCondition = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator joinOp = new JoinOperator(filteredStudentsOp, filteredEnrolledOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, filteredStudentsOp, filteredEnrolledOp, joinCondition);
 
         // Count results and verify
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -146,15 +149,15 @@ public class JoinOperatorTest {
     @Test
     public void testThreeWayJoin() throws Exception {
         // Test three-way join: Students → Enrolled → Courses
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp = new ScanOperator(ctx, ENROLLED_TABLE);
 
         Expression firstJoinCondition = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator firstJoinOp = new JoinOperator(studentsOp, enrolledOp, firstJoinCondition);
+        JoinOperator firstJoinOp = new JoinOperator(ctx, studentsOp, enrolledOp, firstJoinCondition);
 
-        ScanOperator coursesOp = new ScanOperator(COURSES_TABLE);
+        ScanOperator coursesOp = new ScanOperator(ctx, COURSES_TABLE);
         Expression secondJoinCondition = CCJSqlParserUtil.parseExpression("Enrolled.cid = Courses.cid");
-        JoinOperator secondJoinOp = new JoinOperator(firstJoinOp, coursesOp, secondJoinCondition);
+        JoinOperator secondJoinOp = new JoinOperator(ctx, firstJoinOp, coursesOp, secondJoinCondition);
 
         // Count results
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -179,12 +182,12 @@ public class JoinOperatorTest {
     @Test
     public void testJoinWithEmptyTable() throws Exception {
         // Test join with an empty table
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator emptyOp = new ScanOperator(EMPTY_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator emptyOp = new ScanOperator(ctx, EMPTY_TABLE);
 
         // Use a join condition
         Expression joinCondition = CCJSqlParserUtil.parseExpression("1 = 1");
-        JoinOperator joinOp = new JoinOperator(studentsOp, emptyOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, emptyOp, joinCondition);
 
         // Should not produce any tuples
         assertNull(joinOp.getNextTuple(), "Join with empty table should produce null");
@@ -193,11 +196,11 @@ public class JoinOperatorTest {
     @Test
     public void testNonEquiJoin() throws Exception {
         // Test join with a non-equality condition: Students.gpa > Courses.credits
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator coursesOp = new ScanOperator(COURSES_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator coursesOp = new ScanOperator(ctx, COURSES_TABLE);
 
         Expression joinCondition = CCJSqlParserUtil.parseExpression("Students.gpa > Courses.credits");
-        JoinOperator joinOp = new JoinOperator(studentsOp, coursesOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, coursesOp, joinCondition);
 
         // Count results
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -222,11 +225,11 @@ public class JoinOperatorTest {
     @Test
     public void testReset() throws Exception {
         // Test reset functionality
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp = new ScanOperator(ctx, ENROLLED_TABLE);
 
         Expression joinCondition = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator joinOp = new JoinOperator(studentsOp, enrolledOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, enrolledOp, joinCondition);
 
         // Get all tuples first time
         List<Tuple> firstRunTuples = new ArrayList<>();
@@ -262,11 +265,11 @@ public class JoinOperatorTest {
     @Test
     public void testCrossProduct() throws Exception {
         // Test cross product (join with no condition)
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator coursesOp = new ScanOperator(COURSES_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator coursesOp = new ScanOperator(ctx, COURSES_TABLE);
 
         // Null join condition means cross product
-        JoinOperator joinOp = new JoinOperator(studentsOp, coursesOp, null);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, coursesOp, null);
 
         // Count results
         int count = 0;
@@ -282,12 +285,12 @@ public class JoinOperatorTest {
     @Test
     public void testJoinWithComplexCondition() throws Exception {
         // Test join with a more complex condition: Students.sid = Enrolled.sid AND Students.gpa >= 3
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp = new ScanOperator(ctx, ENROLLED_TABLE);
 
         Expression joinCondition = CCJSqlParserUtil.parseExpression(
                 "Students.sid = Enrolled.sid AND Students.gpa >= 3");
-        JoinOperator joinOp = new JoinOperator(studentsOp, enrolledOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, enrolledOp, joinCondition);
 
         // Count results
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -309,13 +312,13 @@ public class JoinOperatorTest {
     @Test
     public void testMultiColumnJoin() throws Exception {
         // Test joining on multiple conditions
-        ScanOperator studentsOp = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator coursesOp = new ScanOperator(COURSES_TABLE);
+        ScanOperator studentsOp = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator coursesOp = new ScanOperator(ctx, COURSES_TABLE);
 
         // Create a join condition that matches on department/age criteria
         Expression joinCondition = CCJSqlParserUtil.parseExpression(
                 "Students.age = Courses.department AND Students.gpa < Courses.credits");
-        JoinOperator joinOp = new JoinOperator(studentsOp, coursesOp, joinCondition);
+        JoinOperator joinOp = new JoinOperator(ctx, studentsOp, coursesOp, joinCondition);
 
         // Count results
         List<Tuple> joinedTuples = new ArrayList<>();
@@ -337,10 +340,10 @@ public class JoinOperatorTest {
         // 1. Regular nested loop (retrieving all results at once)
         // 2. Step-by-step retrieval (simulating the iterator pattern)
 
-        ScanOperator studentsOp1 = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp1 = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp1 = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp1 = new ScanOperator(ctx, ENROLLED_TABLE);
         Expression joinCondition1 = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator joinOp1 = new JoinOperator(studentsOp1, enrolledOp1, joinCondition1);
+        JoinOperator joinOp1 = new JoinOperator(ctx, studentsOp1, enrolledOp1, joinCondition1);
 
         // Get all results at once using the first operator
         List<Tuple> allResults = new ArrayList<>();
@@ -350,10 +353,10 @@ public class JoinOperatorTest {
         }
 
         // Create new operators for step-by-step comparison
-        ScanOperator studentsOp2 = new ScanOperator(STUDENTS_TABLE);
-        ScanOperator enrolledOp2 = new ScanOperator(ENROLLED_TABLE);
+        ScanOperator studentsOp2 = new ScanOperator(ctx, STUDENTS_TABLE);
+        ScanOperator enrolledOp2 = new ScanOperator(ctx, ENROLLED_TABLE);
         Expression joinCondition2 = CCJSqlParserUtil.parseExpression("Students.sid = Enrolled.sid");
-        JoinOperator joinOp2 = new JoinOperator(studentsOp2, enrolledOp2, joinCondition2);
+        JoinOperator joinOp2 = new JoinOperator(ctx, studentsOp2, enrolledOp2, joinCondition2);
 
         // Get the first three results
         List<Tuple> partialResults = new ArrayList<>();

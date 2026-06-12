@@ -25,6 +25,8 @@ public class DuplicateEliminationOperatorTest {
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "TestTable";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         // Create test database directory structure
@@ -45,6 +47,7 @@ public class DuplicateEliminationOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -58,10 +61,10 @@ public class DuplicateEliminationOperatorTest {
     @Test
     public void testDuplicateElimination() {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create a DuplicateEliminationOperator with the scan operator as child
-        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(scanOp);
+        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(ctx, scanOp);
 
         // Get all tuples after duplicate elimination
         List<Tuple> distinctTuples = new ArrayList<>();
@@ -84,7 +87,7 @@ public class DuplicateEliminationOperatorTest {
     @Test
     public void testDuplicateEliminationWithProjection() {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create a projection on column A only (will create more duplicates)
         List<Column> projectedColumns = new ArrayList<>();
@@ -95,10 +98,10 @@ public class DuplicateEliminationOperatorTest {
         colA.setColumnName("A");
         projectedColumns.add(colA);
 
-        ProjectOperator projectOp = new ProjectOperator(scanOp, projectedColumns);
+        ProjectOperator projectOp = new ProjectOperator(ctx, scanOp, projectedColumns);
 
         // Create a DuplicateEliminationOperator after projection
-        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(projectOp);
+        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(ctx, projectOp);
 
         // Get all tuples after duplicate elimination
         List<Tuple> distinctTuples = new ArrayList<>();
@@ -132,10 +135,10 @@ public class DuplicateEliminationOperatorTest {
     @Test
     public void testReset() {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create a DuplicateEliminationOperator
-        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(scanOp);
+        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(ctx, scanOp);
 
         // Get all tuples first time
         List<Tuple> firstRunTuples = new ArrayList<>();
@@ -186,10 +189,10 @@ public class DuplicateEliminationOperatorTest {
         }
 
         // Create a scan operator on empty table
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create a DuplicateEliminationOperator
-        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(scanOp);
+        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(ctx, scanOp);
 
         // Should not return any tuples
         assertNull(distinctOp.getNextTuple(), "Empty input should produce no tuples");
@@ -213,10 +216,10 @@ public class DuplicateEliminationOperatorTest {
         }
 
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create a DuplicateEliminationOperator
-        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(scanOp);
+        DuplicateEliminationOperator distinctOp = new DuplicateEliminationOperator(ctx, scanOp);
 
         // Count results
         int count = 0;
