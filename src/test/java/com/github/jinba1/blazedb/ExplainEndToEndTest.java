@@ -91,4 +91,17 @@ public class ExplainEndToEndTest {
         assertTrue(text.contains("=== Plan (optimized) ===\n"), text);
         assertTrue(text.contains("Scan[Sales]"), text);
     }
+
+    @Test
+    public void cliCreatesMissingOutputDirectoryForExplain() throws IOException {
+        // execute() creates missing parent dirs for data queries; EXPLAIN must match
+        Path q = tempDb.resolve("explain.sql");
+        Files.writeString(q, "EXPLAIN SELECT * FROM Sales WHERE Sales.qty > 5;");
+        Path out = tempDb.resolve("nested").resolve("dir").resolve("explain-out.txt");
+
+        int code = BlazeDB.run(new String[]{tempDb.toString(), q.toString(), out.toString()});
+
+        assertEquals(0, code);
+        assertTrue(Files.readString(out).contains("Scan[Sales]"));
+    }
 }

@@ -66,7 +66,11 @@ public class BlazeDB {
 
 			if (planned.explainText() != null) {
 				// EXPLAIN: write the plan text, execute nothing; budgets don't apply
-				Files.writeString(Path.of(args[2]), planned.explainText());
+				Path explainOut = Path.of(args[2]);
+				if (explainOut.getParent() != null) {
+					Files.createDirectories(explainOut.getParent());
+				}
+				Files.writeString(explainOut, planned.explainText());
 				System.out.println("Explain written to: " + args[2]);
 				return 0;
 			}
