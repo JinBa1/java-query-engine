@@ -39,7 +39,7 @@ public class PlanContextTest {
 
     @Test
     public void registersIntermediateSchemaWithTempPrefix() {
-        Map<String, Integer> schema = new HashMap<>(Map.of("student.a", 0, "student.b", 1));
+        Map<String, Integer> schema = new HashMap<>(Map.of("Student.a", 0, "Student.b", 1));
         String id = ctx.registerSchemaWithTransformation(
                 schema, "Student", SchemaTransformationType.PROJECTION, new HashMap<>());
         assertTrue(id.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX));
@@ -49,7 +49,7 @@ public class PlanContextTest {
 
     @Test
     public void registrationsAreIsolatedBetweenContexts() {
-        Map<String, Integer> schema = new HashMap<>(Map.of("student.a", 0));
+        Map<String, Integer> schema = new HashMap<>(Map.of("Student.a", 0));
         String id = ctx.registerSchemaWithTransformation(
                 schema, "Student", SchemaTransformationType.PROJECTION, new HashMap<>());
 
@@ -61,7 +61,7 @@ public class PlanContextTest {
     @Test
     public void resolvesColumnThroughParentChain() {
         // child schema lacks the column; parent (base table) has it
-        Map<String, Integer> child = new HashMap<>(Map.of("student.b", 0));
+        Map<String, Integer> child = new HashMap<>(Map.of("Student.b", 0));
         String childId = ctx.registerSchemaWithTransformation(
                 child, "Student", SchemaTransformationType.PROJECTION, new HashMap<>());
         ctx.addParentSchema(childId, "Student");
@@ -73,7 +73,7 @@ public class PlanContextTest {
 
     @Test
     public void multiParentTracking() {
-        Map<String, Integer> joined = new HashMap<>(Map.of("student.a", 0, "enrolled.x", 1));
+        Map<String, Integer> joined = new HashMap<>(Map.of("Student.a", 0, "Enrolled.x", 1));
         String id = ctx.registerSchemaWithTransformation(
                 joined, null, SchemaTransformationType.JOIN, new HashMap<>());
         ctx.addParentSchema(id, "Student");
@@ -87,7 +87,7 @@ public class PlanContextTest {
         assertEquals(List.of("a", "b", "c"), ctx.getOrderedColumnNames("Student"));
 
         // intermediate: bare-ifies qualified names, max-index defines width
-        Map<String, Integer> schema = new HashMap<>(Map.of("student.b", 0, "student.a", 1));
+        Map<String, Integer> schema = new HashMap<>(Map.of("Student.b", 0, "Student.a", 1));
         String id = ctx.registerSchemaWithTransformation(
                 schema, "Student", SchemaTransformationType.PROJECTION, new HashMap<>());
         assertEquals(List.of("b", "a"), ctx.getOrderedColumnNames(id));

@@ -109,7 +109,8 @@ public class PlanContext {
     private Integer smartResolveColumnIndex(String schemaId, String tableName, String columnName) {
         Map<String, Integer> schema = getSchema(schemaId);
         if (schema == null) return null;
-        Integer index = schema.get(tableName.toLowerCase() + "." + columnName.toLowerCase());
+        String qualifiedKey = tableName + "." + columnName.toLowerCase();
+        Integer index = schema.get(qualifiedKey);
         if (index == null) {
             index = schema.get(columnName.toLowerCase());
         }
