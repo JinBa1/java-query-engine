@@ -108,8 +108,8 @@ public class DuplicateEliminationOperator extends Operator {
 
     /**
      * Registers the schema for this operator.
-     * Creates a schema identical to the child operator's schema, since sorting
-     * does not change the structure of tuples, only their order.
+     * Creates a schema identical to the child operator's schema, since duplicate
+     * elimination does not change the structure of tuples.
      * Transformation details are recorded.
      */
     @Override

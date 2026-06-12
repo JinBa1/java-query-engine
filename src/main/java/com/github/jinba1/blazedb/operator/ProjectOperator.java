@@ -97,7 +97,7 @@ public class ProjectOperator extends Operator {
     /**
      * Update the projection's schema transformation mapping
      * Help the optimiser to make decisions and other operators to locate the columns.
-     * @see DBCatalog for details on schema tracking.
+     * @see com.github.jinba1.blazedb.PlanContext for details on schema tracking.
      */
     @Override
     protected void registerSchema() {

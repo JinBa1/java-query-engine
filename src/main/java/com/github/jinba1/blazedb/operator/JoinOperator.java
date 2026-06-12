@@ -3,8 +3,6 @@ package com.github.jinba1.blazedb.operator;
 import com.github.jinba1.blazedb.*;
 import net.sf.jsqlparser.expression.Expression;
 
-// QueryBudget is imported transitively via the wildcard above
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -176,7 +174,7 @@ public class JoinOperator extends Operator {
 
     /**
      * Registers the schema for this join operator.
-     * Creates a combined schema from both child operators and registers it with DBCatalog.
+     * Creates a combined schema from both child operators and registers it with the per-query PlanContext.
      * Records transformation details to track how the schema was derived.
      */
     @Override
@@ -328,8 +326,6 @@ public class JoinOperator extends Operator {
         // Re-register schema based on updated children
         registerSchema();
 
-        // MISSING STEP: Update join condition expressions to match new schema
-        // Create a new evaluator with the updated schema
         this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
 
     }

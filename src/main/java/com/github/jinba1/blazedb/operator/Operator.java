@@ -2,6 +2,7 @@ package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
+import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.SchemaTransformationType;
 import com.github.jinba1.blazedb.Tuple;
 import net.sf.jsqlparser.schema.Column;
@@ -136,7 +137,7 @@ public abstract class Operator {
 
     /**
      * Register this operator's schema transformation.
-     * @see com.github.jinba1.blazedb.DBCatalog update the information in this class.
+     * @see com.github.jinba1.blazedb.PlanContext the per-query registry this updates.
      */
     protected abstract void registerSchema() ;
     /**
@@ -212,6 +213,10 @@ public abstract class Operator {
 
         String childSchemaId = child.propagateSchemaId();
         Map<String, Integer> childSchema = ctx.getSchema(childSchemaId);
+        if (childSchema == null) {
+            throw new QueryExecutionException(
+                    "No schema found for id '" + childSchemaId + "'");
+        }
 
         // Create identical schema structure
         Map<String, Integer> newSchema = new HashMap<>(childSchema);
