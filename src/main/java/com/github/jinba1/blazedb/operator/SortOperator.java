@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The SortOperator implements the ORDER BY operation in SQL queries.
@@ -71,7 +72,7 @@ public class SortOperator extends Operator {
 
         Tuple currentTuple = tupleBuffer.get(currentTupleIndex);
         currentTupleIndex += 1;
-        tupleCounter++;
+        countTuple();
         return currentTuple;
     }
 
@@ -169,6 +170,12 @@ public class SortOperator extends Operator {
         );
 
         schemaRegistered = true;
+    }
+
+    @Override
+    public String describe() {
+        return "Sort[" + sortColumns.stream().map(Column::toString)
+                .collect(Collectors.joining(", ")) + "]";
     }
 
     public List<Column> getSortColumns() {

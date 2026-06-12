@@ -48,7 +48,7 @@ public class DuplicateEliminationOperator extends Operator {
 
         // Return the next unique tuple if available
         if (tupleIterator.hasNext()) {
-            tupleCounter++;
+            countTuple();
             return tupleIterator.next();
         }
 
@@ -97,6 +97,11 @@ public class DuplicateEliminationOperator extends Operator {
     public String propagateSchemaId() {
         ensureSchemaRegistered();
         return intermediateSchemaId;
+    }
+
+    @Override
+    public String describe() {
+        return "Distinct";
     }
 
     /**

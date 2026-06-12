@@ -2,6 +2,7 @@ package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.Constants;
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.QueryBudget;
 import com.github.jinba1.blazedb.SchemaTransformationType;
 import com.github.jinba1.blazedb.Tuple;
 import net.sf.jsqlparser.schema.Column;
@@ -31,6 +32,9 @@ public abstract class Operator {
     // Tuple counter for performance benchmarking
     protected long tupleCounter = 0;
 
+    // Per-query execution budget; null means unlimited (default)
+    protected QueryBudget budget = null;
+
     /**
      * Retrieves the next tuple from the iterator.
      * @return A Tuple object representing the row of data, or NULL if EOF reached.
@@ -53,9 +57,38 @@ public abstract class Operator {
     }
 
     /**
+     * Counts one emitted tuple and charges the query budget, if any.
+     * Every operator calls this instead of incrementing tupleCounter directly,
+     * so a budget observes total work across the whole tree.
+     */
+    protected final void countTuple() {
+        tupleCounter++;
+        if (budget != null) {
+            budget.charge();
+        }
+    }
+
+    /**
+     * Attaches a query budget to this operator and its entire subtree.
+     * @param budget The budget shared by all operators of one query
+     */
+    public void attachBudget(QueryBudget budget) {
+        this.budget = budget;
+        if (hasChild()) {
+            child.attachBudget(budget);
+        }
+    }
+
+    /**
      * Resets the iterator to the start.
      */
     public abstract void reset();
+
+    /**
+     * One-line, human-readable description of this operator for plan rendering
+     * (e.g. "Scan[Sales]", "Select[Sales.qty > 5]"). No tree structure, no newlines.
+     */
+    public abstract String describe();
     /**
      * Propagates and retrieves the schema ID used to track schema transformations.
      * This method ensures schema consistency throughout the query evaluation. Each operator must appropriately propagate

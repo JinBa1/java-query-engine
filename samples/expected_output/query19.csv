@@ -1,0 +1,3 @@
+dept,min(staff.name),max(staff.salary),count(*)
+sales,bob,90,2
+eng,alice,120,3

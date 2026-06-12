@@ -164,7 +164,7 @@ public class StringEndToEndTest {
         Path out = tempDb.resolve("sum-out.csv");
 
         // Drive parse + execute directly: the SUM type error is thrown at runtime inside
-        // SumOperator and propagates through execute (which catches only IOException).
+        // AggregateOperator and propagates through execute (which catches only IOException).
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
         Operator root = QueryPlanner.parseStatement(query.toString());

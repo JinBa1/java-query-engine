@@ -112,8 +112,8 @@ public class QueryPlanOptimizer {
             return false;
         }
 
-        // If the child is a SumOperator, never consider the projection trivial
-        if (childOp instanceof SumOperator) {
+        // If the child is an AggregateOperator, never consider the projection trivial
+        if (childOp instanceof AggregateOperator) {
             return false;
         }
 
@@ -580,7 +580,7 @@ public class QueryPlanOptimizer {
         }
         else if (op instanceof DuplicateEliminationOperator ||
                 op instanceof SortOperator ||
-                op instanceof SumOperator) {
+                op instanceof AggregateOperator) {
             return pushProjectionThroughPassthroughOp(op, requiredColumns);
         }
 
@@ -733,6 +733,11 @@ public class QueryPlanOptimizer {
             return scanOp;
         }
 
+        // Sort columns deterministically (by table then column name) so describe() output is stable
+        tableColumns.sort(Comparator
+                .comparing((Column c) -> c.getTable() != null ? c.getTable().getName() : "")
+                .thenComparing(Column::getColumnName));
+
         // If we're not selecting all columns, add a projection
         Map<String, Integer> tableSchema = DBCatalog.getInstance().getDBSchemata(tableName);
         if (tableColumns.size() < tableSchema.size()) {
@@ -743,9 +748,9 @@ public class QueryPlanOptimizer {
     }
 
     /**
-     * Pushes projection through passthrough operators like DuplicateElimination, Sort, and Sum.
-     * These operators typically need all colum
-     * ns from their input for proper operation.
+     * Pushes projection through passthrough operators like DuplicateElimination, Sort,
+     * and Aggregate. These operators typically need all columns from their input for
+     * proper operation.
      * @param op The operator to process
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree

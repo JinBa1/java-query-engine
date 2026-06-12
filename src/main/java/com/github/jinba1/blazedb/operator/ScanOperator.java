@@ -99,7 +99,7 @@ public class ScanOperator extends Operator {
                 attributes.add(new StringValue(field));
             }
         }
-        tupleCounter++;
+        countTuple();
         return new Tuple(attributes);
     }
 
@@ -149,6 +149,11 @@ public class ScanOperator extends Operator {
     @Override
     protected void registerSchema() {
         this.schemaRegistered = true;
+    }
+
+    @Override
+    public String describe() {
+        return "Scan[" + tableName + "]";
     }
 
     /**

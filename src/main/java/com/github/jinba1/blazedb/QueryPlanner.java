@@ -4,11 +4,13 @@ import com.github.jinba1.blazedb.operator.*;
 import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.ExplainStatement;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 
@@ -34,37 +36,40 @@ public class QueryPlanner {
 
     /**
      * Parses an SQL statement from a file and constructs a query plan.
-     * This is the main entry point for query processing in BlazeDB.
+     * Kept for existing callers; EXPLAIN-aware callers should use {@link #planQuery}.
      * @param filename The path to a file containing a valid SQL query
      * @return The root operator of the constructed query plan, or null if parsing fails
      */
     public static Operator parseStatement(String filename) {
+        return planQuery(filename).root();
+    }
+
+    /**
+     * Plans one query file. For EXPLAIN queries, renders the operator tree before and
+     * after optimization into {@link PlannedQuery#explainText()}; the returned root is
+     * the optimized, executable tree either way.
+     * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
+     * @return The planned query; root is null if parsing fails
+     */
+    public static PlannedQuery planQuery(String filename) {
         Operator rootOp = null;
+        boolean explain = false;
         try {
             Statement statement = CCJSqlParserUtil.parse(new FileReader(filename));
 
-            if (statement != null) {
-                Select select = (Select) statement;
-                // Create scan operator for the first table
-                rootOp = createScanOperator(select);
-
-                // Process joins if they exist
-                if (existJoinOp(select)) {
-                    rootOp = processJoins(rootOp, select);
-                } else if (existSelectOp(select)) {
-                    // For queries without joins, add selection directly
-                    rootOp = new SelectOperator(rootOp, select.getPlainSelect().getWhere());
-                }
-
-                // Process GROUP BY and aggregation
-                rootOp = processGroupByAndAggregation(rootOp, select);
-
-                // Process projection (if needed)
-                rootOp = processProjection(rootOp, select);
-
-                // Process DISTINCT and ORDER BY
-                rootOp = processDistinctAndOrderBy(rootOp, select);
+            Select select = null;
+            if (statement instanceof ExplainStatement explainStatement) {
+                explain = true;
+                select = explainStatement.getStatement();
+            } else if (statement != null) {
+                select = (Select) statement;
             }
+
+            if (select != null) {
+                rootOp = buildOperatorTree(select);
+            }
+        } catch (QueryExecutionException e) {
+            throw e;
         } catch (Exception e) {
             System.err.println("Exception occurred during parsing");
             e.printStackTrace();
@@ -73,10 +78,40 @@ public class QueryPlanner {
         // Ensure schemas are properly registered
         ensureAllSchemasRegistered(rootOp);
 
-        // Apply query optimization if enabled
-        if (Constants.useQueryOptimization) {
+        String beforeText = (explain && rootOp != null) ? PlanPrinter.print(rootOp) : null;
+
+        // Apply query optimization if enabled (skip when planning failed: root is null)
+        if (Constants.useQueryOptimization && rootOp != null) {
             rootOp = QueryPlanOptimizer.optimize(rootOp);
         }
+
+        String explainText = null;
+        if (explain && rootOp != null) {
+            explainText = "=== Plan (as written) ===\n" + beforeText
+                    + "\n=== Plan (optimized) ===\n" + PlanPrinter.print(rootOp);
+        }
+
+        return new PlannedQuery(rootOp, explainText);
+    }
+
+    /**
+     * Builds the unoptimized operator tree for a SELECT (the pipeline previously inlined
+     * in parseStatement): scan, joins/selection, aggregation, projection, distinct/order,
+     * limit.
+     */
+    private static Operator buildOperatorTree(Select select) {
+        Operator rootOp = createScanOperator(select);
+
+        if (existJoinOp(select)) {
+            rootOp = processJoins(rootOp, select);
+        } else if (existSelectOp(select)) {
+            rootOp = new SelectOperator(rootOp, select.getPlainSelect().getWhere());
+        }
+
+        rootOp = processGroupByAndAggregation(rootOp, select);
+        rootOp = processProjection(rootOp, select);
+        rootOp = processDistinctAndOrderBy(rootOp, select);
+        rootOp = processLimit(rootOp, select);
 
         return rootOp;
     }
@@ -128,7 +163,11 @@ public class QueryPlanner {
             Expression joinCondition = findJoinCondition(joinExpressions, joinedTableNames, table);
 
             Operator rightOp = new ScanOperator(table.getName());
-            rootOp = new JoinOperator(rootOp, rightOp, joinCondition);
+            if (Constants.useHashJoin && HashJoinOperator.hasEquiConjunct(joinCondition)) {
+                rootOp = new HashJoinOperator(rootOp, rightOp, joinCondition);
+            } else {
+                rootOp = new JoinOperator(rootOp, rightOp, joinCondition);
+            }
 
             joinedTableNames.add(table.getName());
 
@@ -144,41 +183,38 @@ public class QueryPlanner {
 
     /**
      * Processes GROUP BY and aggregation operations.
-     * Handles both queries with explicit GROUP BY and those with SUM aggregates only.
+     * Handles both queries with explicit GROUP BY and those with SUM/COUNT/AVG/MIN/MAX aggregates.
      * @param rootOp The operator tree so far
      * @param select The SELECT statement being processed
      * @return Updated operator tree with aggregation
      */
     private static Operator processGroupByAndAggregation(Operator rootOp, Select select) {
-        // Handle GROUP BY with SUM
-        if (existGroupByOp(select)) {
-            List<Column> groupByColumns = extractGroupByColumns(select);
-            List<Expression> sumExpressions = extractSumExpressions(select);
-            List<Column> outputColumns = extractNonAggregateColumns(select);
+        validateAggregateQuery(select);
 
-            Set<Column> requiredColumns = getRequiredColumnsForSum(groupByColumns, sumExpressions, select);
+        boolean hasGroupBy = existGroupByOp(select);
+        boolean hasAggregates = existAggregate(select);
 
-            // Project only required columns before aggregation
-            Operator childOp = rootOp;
-            rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
-
-            // Add the SUM operator
-            rootOp = new SumOperator(rootOp, groupByColumns, sumExpressions, outputColumns);
-        }
-        // Handle SUM without GROUP BY
-        else if (existSumAggregate(select)) {
-            List<Column> groupByColumns = new ArrayList<>(); // Empty for no grouping
-            List<Expression> sumExpressions = extractSumExpressions(select);
-            List<Column> outputColumns = new ArrayList<>(); // Empty for no grouping
-
-            Set<Column> requiredColumns = getRequiredColumnsForSum(groupByColumns, sumExpressions, select);
-            Operator childOp = rootOp;
-            rootOp = new ProjectOperator(childOp, new ArrayList<>(requiredColumns));
-
-            rootOp = new SumOperator(rootOp, groupByColumns, sumExpressions, outputColumns);
+        if (!hasGroupBy && !hasAggregates) {
+            return rootOp;
         }
 
-        return rootOp;
+        List<Column> groupByColumns = hasGroupBy ? extractGroupByColumns(select) : new ArrayList<>();
+        List<AggregateCall> aggregateCalls = extractAggregateCalls(select);
+        List<Column> outputColumns = hasGroupBy ? extractNonAggregateColumns(select) : new ArrayList<>();
+
+        Set<Column> requiredColumns = getRequiredColumnsForAggregation(groupByColumns, aggregateCalls, select);
+
+        // SELECT COUNT(*) FROM t with no WHERE/GROUP BY needs no columns at all;
+        // a zero-column projection is meaningless, so skip it.
+        if (!requiredColumns.isEmpty()) {
+            List<Column> sortedColumns = new ArrayList<>(requiredColumns);
+            sortedColumns.sort(Comparator
+                    .comparing((Column c) -> c.getTable() != null ? c.getTable().getName() : "")
+                    .thenComparing(Column::getColumnName));
+            rootOp = new ProjectOperator(rootOp, sortedColumns);
+        }
+
+        return new AggregateOperator(rootOp, groupByColumns, aggregateCalls, outputColumns);
     }
 
     /**
@@ -189,8 +225,8 @@ public class QueryPlanner {
      * @return Updated operator tree with projection
      */
     private static Operator processProjection(Operator rootOp, Select select) {
-        // Add projection if needed (only if not GROUP BY or SUM or if SELECT *)
-        if (existProjectOp(select) && !existSumAggregate(select) && !existGroupByOp(select)) {
+        // Add projection if needed (only if not GROUP BY or aggregate or if SELECT *)
+        if (existProjectOp(select) && !existAggregate(select) && !existGroupByOp(select)) {
             rootOp = new ProjectOperator(rootOp, getProjectCols(select));
         }
 
@@ -219,6 +255,30 @@ public class QueryPlanner {
     }
 
     /**
+     * Applies the LIMIT clause, if present, as the topmost operator.
+     * Only plain "LIMIT n" with a non-negative integer literal is supported.
+     */
+    private static Operator processLimit(Operator rootOp, Select select) {
+        Limit limit = select.getLimit();
+        if (limit == null) {
+            return rootOp;
+        }
+        if (limit.getOffset() != null) {
+            throw new QueryExecutionException("OFFSET is not supported; use plain LIMIT n");
+        }
+        if (limit.isLimitAll() || limit.isLimitNull()) {
+            throw new QueryExecutionException(
+                    "LIMIT ALL / LIMIT NULL are not supported; use LIMIT n with n >= 0");
+        }
+        if (!(limit.getRowCount() instanceof LongValue rowCount) || rowCount.getValue() < 0) {
+            throw new QueryExecutionException(
+                    "LIMIT requires a non-negative integer literal; got '"
+                            + limit.getRowCount() + "'");
+        }
+        return new LimitOperator(rootOp, rowCount.getValue());
+    }
+
+    /**
      * Checks if a GROUP BY clause exists in the query.
      * @param select The SELECT statement to check
      * @return true if a GROUP BY clause exists, false otherwise
@@ -230,22 +290,78 @@ public class QueryPlanner {
     }
 
     /**
-     * Checks if any SUM aggregates exist in the query.
-     * @param select The SELECT statement to check
-     * @return true if any SUM aggregates exist, false otherwise
+     * Checks if any aggregate function (SUM/COUNT/AVG/MIN/MAX) appears in the SELECT list.
      */
-    private static boolean existSumAggregate(Select select) {
-        List<SelectItem<?>> selectItems = select.getPlainSelect().getSelectItems();
-        for (SelectItem<?> item : selectItems) {
+    private static boolean existAggregate(Select select) {
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
             Expression expr = item.getExpression();
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    return true;
-                }
+            if (expr instanceof Function function
+                    && AggregateFunction.fromFunctionName(function.getName()) != null) {
+                return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Validates the SELECT list of aggregate / GROUP BY queries at plan time — the engine
+     * would otherwise silently drop unsupported items (or fail late with a generic runtime
+     * error), which misleads agent callers. Rules:
+     * - every SELECT item must be an aggregate call or a plain column;
+     * - SELECT * cannot be combined with aggregates or GROUP BY;
+     * - without GROUP BY, no bare columns may appear alongside aggregates;
+     * - with GROUP BY, every selected bare column must appear in the GROUP BY list.
+     */
+    private static void validateAggregateQuery(Select select) {
+        boolean hasAggregates = existAggregate(select);
+        boolean hasGroupBy = existGroupByOp(select);
+        if (!hasAggregates && !hasGroupBy) {
+            return;
+        }
+
+        Set<String> groupByKeys = new HashSet<>();
+        if (hasGroupBy) {
+            for (Column column : extractGroupByColumns(select)) {
+                groupByKeys.add(columnKey(column));
+            }
+        }
+
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
+            Expression expr = item.getExpression();
+
+            if (expr instanceof Function function
+                    && AggregateFunction.fromFunctionName(function.getName()) != null) {
+                continue; // aggregate call — validated by extractAggregateCalls
+            }
+            if (expr instanceof AllColumns) {
+                throw new QueryExecutionException(
+                        "SELECT * cannot be combined with aggregates or GROUP BY; "
+                                + "list the columns explicitly");
+            }
+            if (expr instanceof Column column) {
+                if (!hasGroupBy) {
+                    throw new QueryExecutionException(
+                            "Non-aggregate column '" + column
+                                    + "' in SELECT with aggregates requires GROUP BY");
+                }
+                if (!groupByKeys.contains(columnKey(column))) {
+                    throw new QueryExecutionException(
+                            "Column '" + column + "' in SELECT must appear in GROUP BY");
+                }
+                continue;
+            }
+            throw new QueryExecutionException(
+                    "Unsupported SELECT item '" + expr + "' with aggregates or GROUP BY; "
+                            + "only aggregate functions and grouped columns are allowed");
+        }
+    }
+
+    /** Case-insensitive identity key for a column reference ("table.col" or bare "col"). */
+    private static String columnKey(Column column) {
+        String table = column.getTable() != null && column.getTable().getName() != null
+                ? column.getTable().getName().toLowerCase() + "."
+                : "";
+        return table + column.getColumnName().toLowerCase();
     }
 
     /**
@@ -271,25 +387,71 @@ public class QueryPlanner {
     }
 
     /**
-     * Extracts SUM expressions from a query.
+     * Extracts aggregate calls (SUM/COUNT/AVG/MIN/MAX) from the SELECT list, in order.
+     * Computes each call's schema key in the engine's established format:
+     * "SUM(student.b)" for column arguments, "SUM(0)" (call index) for expression
+     * arguments, "COUNT(*)" for the star form. Keys are lowercased only at output.
      * @param select The SELECT statement to extract from
-     * @return A list of Expression objects representing SUM aggregates
+     * @return The aggregate calls in SELECT-list order
      */
-    private static List<Expression> extractSumExpressions(Select select) {
-        List<Expression> sumExpressions = new ArrayList<>();
-        List<SelectItem<?>> selectItems = select.getPlainSelect().getSelectItems();
-
-        for (SelectItem<?> item : selectItems) {
+    private static List<AggregateCall> extractAggregateCalls(Select select) {
+        List<AggregateCall> calls = new ArrayList<>();
+        for (SelectItem<?> item : select.getPlainSelect().getSelectItems()) {
             Expression expr = item.getExpression();
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    sumExpressions.add(function);
+            if (!(expr instanceof Function function)) {
+                continue;
+            }
+            AggregateFunction aggregateFunction = AggregateFunction.fromFunctionName(function.getName());
+            if (aggregateFunction == null) {
+                continue;
+            }
+
+            Expression argument;
+            boolean isStar = function.isAllColumns()
+                    || function.getParameters() == null
+                    || function.getParameters().isEmpty()
+                    || (function.getParameters().size() == 1
+                            && function.getParameters().get(0) instanceof AllColumns);
+            if (isStar) {
+                if (aggregateFunction != AggregateFunction.COUNT) {
+                    throw new QueryExecutionException(
+                            function.getName() + "(*) is not supported; only COUNT(*) may use '*'");
+                }
+                argument = null;
+            } else {
+                if (function.getParameters().size() != 1) {
+                    throw new QueryExecutionException(
+                            function.getName() + " expects exactly one argument, got "
+                                    + function.getParameters().size() + ": '" + function + "'");
+                }
+                argument = (Expression) function.getParameters().get(0);
+                // The engine resolves columns by table qualifier throughout (projection,
+                // schema keys); an unqualified argument would fail later with an opaque
+                // NPE, so reject it here with a usable message instead
+                ColumnExtractor extractor = new ColumnExtractor();
+                argument.accept(extractor);
+                for (Column argColumn : extractor.getColumns()) {
+                    if (argColumn.getTable() == null || argColumn.getTable().getName() == null) {
+                        throw new QueryExecutionException(
+                                "Aggregate arguments must use qualified column names "
+                                        + "(table.column): '" + function + "'");
+                    }
                 }
             }
-        }
 
-        return sumExpressions;
+            String schemaKey;
+            if (argument == null) {
+                schemaKey = function.getName() + "(*)";
+            } else if (argument instanceof Column column) {
+                schemaKey = function.getName() + "(" + column.getTable().getName() + "."
+                        + column.getColumnName().toLowerCase() + ")";
+            } else {
+                schemaKey = function.getName() + "(" + calls.size() + ")";
+            }
+
+            calls.add(new AggregateCall(aggregateFunction, argument, schemaKey));
+        }
+        return calls;
     }
 
     /**
@@ -520,36 +682,26 @@ public class QueryPlanner {
     }
 
     /**
-     * Determines which columns are required for SUM aggregation.
-     * Includes group-by columns, columns in SUM expressions, and columns from WHERE clause.
-     * @param groupByColumns Columns in the GROUP BY clause
-     * @param sumExpressions SUM aggregate expressions
-     * @param select The SELECT statement being processed
-     * @return A set of all required columns
+     * Determines which columns must survive into the aggregation input:
+     * group-by columns, columns inside aggregate arguments (COUNT(*) contributes none),
+     * and columns from the WHERE clause.
      */
-    private static Set<Column> getRequiredColumnsForSum(
+    private static Set<Column> getRequiredColumnsForAggregation(
             List<Column> groupByColumns,
-            List<Expression> sumExpressions,
+            List<AggregateCall> aggregateCalls,
             Select select) {
 
         Set<Column> requiredColumns = new HashSet<>(groupByColumns);
 
-        // Add columns used in SUM expressions
-        for (Expression expr : sumExpressions) {
-            if (expr instanceof Function) {
-                Function function = (Function) expr;
-                if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                    Expression innerExpr = (Expression) function.getParameters().get(0);
-
-                    // Extract columns from the SUM expression
-                    ColumnExtractor extractor = new ColumnExtractor();
-                    innerExpr.accept(extractor);
-                    requiredColumns.addAll(extractor.getColumns());
-                }
+        for (AggregateCall call : aggregateCalls) {
+            if (call.argument() == null) {
+                continue; // COUNT(*) needs no input columns
             }
+            ColumnExtractor extractor = new ColumnExtractor();
+            call.argument().accept(extractor);
+            requiredColumns.addAll(extractor.getColumns());
         }
 
-        // Add columns from the WHERE clause (for join/selection conditions)
         Expression whereExpr = select.getPlainSelect().getWhere();
         if (whereExpr != null) {
             ColumnExtractor extractor = new ColumnExtractor();

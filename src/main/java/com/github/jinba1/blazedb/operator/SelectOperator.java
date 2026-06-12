@@ -49,7 +49,7 @@ public class SelectOperator extends Operator {
                 break; //reached end of table because returned null
             }
             if (evaluator.evaluate(expression, nextTuple)) {
-                tupleCounter++;
+                countTuple();
                 return nextTuple; //expression hold, return this tuple
             }
         }
@@ -73,6 +73,11 @@ public class SelectOperator extends Operator {
     public String propagateSchemaId() {
         ensureSchemaRegistered();
         return intermediateSchemaId;
+    }
+
+    @Override
+    public String describe() {
+        return "Select[" + expression + "]";
     }
 
     /**

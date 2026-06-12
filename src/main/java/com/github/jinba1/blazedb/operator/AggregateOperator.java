@@ -1,37 +1,35 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.*;
-import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.Function;
-import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.schema.Column;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * The SumOperator implements the GROUP BY operation with SUM aggregation in SQL.
+ * The AggregateOperator implements GROUP BY with SUM/COUNT/AVG/MIN/MAX aggregation in SQL.
  * It is a blocking operator that reads all tuples from its child, groups them
- * by the specified columns, and calculates SUM aggregates for each group.
+ * by the specified columns, and computes aggregates for each group via accumulators.
  */
-public class SumOperator extends Operator {
+public class AggregateOperator extends Operator {
 
     // Grouping columns and their resolved indices
     private List<Column> groupByColumns;
     private List<Integer> groupByIndices;
 
-    // SUM aggregate expressions and their evaluators
-    private List<Expression> sumExpressions;
+    // Aggregate calls and their argument evaluators (one evaluator per call)
+    private List<AggregateCall> aggregateCalls;
     private List<ExpressionEvaluator> evaluators;
 
     // Output columns (group by columns that should be in the output)
     private List<Column> outputColumns;
     private List<Integer> outputIndices;
 
-    // Map of groups and their aggregate values
-    private Map<List<Value>, List<Integer>> groupAggregates;
+    // Map of groups and their accumulators (one accumulator per call per group)
+    private Map<List<Value>, List<Accumulator>> groupAggregates;
 
     // Iterator for returning grouped results
-    private Iterator<Map.Entry<List<Value>, List<Integer>>> resultIterator;
+    private Iterator<Map.Entry<List<Value>, List<Accumulator>>> resultIterator;
 
     // Flag to track if all input has been processed
     private boolean processed;
@@ -40,17 +38,18 @@ public class SumOperator extends Operator {
     private boolean schemaRegistered = false;
 
     /**
-     * Constructs a SumOperator with the specified child operator, grouping columns,
-     * SUM expressions, and output columns.
+     * Constructs an AggregateOperator with the specified child operator, grouping columns,
+     * aggregate calls, and output columns.
      * @param child The child operator from which to read tuples
      * @param groupByColumns The columns to group by
-     * @param sumExpressions The SUM aggregate expressions
+     * @param aggregateCalls The aggregate calls (SUM/COUNT/AVG/MIN/MAX) in SELECT-list order
      * @param outputColumns The columns to include in the output (subset of groupByColumns)
      */
-    public SumOperator(Operator child, List<Column> groupByColumns, List<Expression> sumExpressions, List<Column> outputColumns) {
+    public AggregateOperator(Operator child, List<Column> groupByColumns,
+                             List<AggregateCall> aggregateCalls, List<Column> outputColumns) {
         this.child = child;
         this.groupByColumns = groupByColumns;
-        this.sumExpressions = sumExpressions;
+        this.aggregateCalls = aggregateCalls;
         this.outputColumns = outputColumns;
 
         this.groupByIndices = new ArrayList<>();
@@ -58,21 +57,16 @@ public class SumOperator extends Operator {
         this.evaluators = new ArrayList<>();
         this.groupAggregates = new HashMap<>();
         this.processed = false;
-        // Ensure child schema is registered
         this.child.ensureSchemaRegistered();
 
-        // Register our schema
         registerSchema();
 
-        // Initialize evaluators for each SUM expression
         String schemaId = child.propagateSchemaId();
-        for (int i = 0; i < sumExpressions.size(); i++) {
+        for (int i = 0; i < aggregateCalls.size(); i++) {
             this.evaluators.add(new ExpressionEvaluator(schemaId));
         }
 
-        // Resolve column indices
         resolveColumnIndices();
-
     }
 
     /**
@@ -87,8 +81,6 @@ public class SumOperator extends Operator {
         String schemaId = child.propagateSchemaId();
         groupByIndices.clear();
         outputIndices.clear();
-
-        // Debug output to verify column resolution
 
         // Resolve group by column indices
         this.groupByIndices = resolveColumnIndices(groupByColumns, schemaId, groupByIndices);
@@ -113,19 +105,18 @@ public class SumOperator extends Operator {
 
         // Return the next result if available
         if (resultIterator.hasNext()) {
-            Map.Entry<List<Value>, List<Integer>> entry = resultIterator.next();
+            Map.Entry<List<Value>, List<Accumulator>> entry = resultIterator.next();
             List<Value> groupKeys = entry.getKey();
-            List<Integer> aggregateValues = entry.getValue();
 
             // Construct the result tuple from output columns and aggregate values
             ArrayList<Value> resultAttributes = new ArrayList<>();
 
             // If no GROUP BY, just return aggregate values
             if (groupByColumns.isEmpty()) {
-                for (Integer agg : aggregateValues) {
-                    resultAttributes.add(new IntValue(agg));
+                for (Accumulator accumulator : entry.getValue()) {
+                    resultAttributes.add(accumulator.result());
                 }
-                tupleCounter++;
+                countTuple();
                 return new Tuple(resultAttributes);
             }
 
@@ -140,11 +131,11 @@ public class SumOperator extends Operator {
             }
 
             // Add aggregate values to the result
-            for (Integer agg : aggregateValues) {
-                resultAttributes.add(new IntValue(agg));
+            for (Accumulator accumulator : entry.getValue()) {
+                resultAttributes.add(accumulator.result());
             }
 
-            tupleCounter++;
+            countTuple();
             return new Tuple(resultAttributes);
         }
 
@@ -157,46 +148,34 @@ public class SumOperator extends Operator {
      * For each tuple read from the child:
      * 1. Extract group key values (if any)
      * 2. Get or create aggregate values for this group
-     * 3. Evaluate each SUM expression and add to the appropriate aggregate
+     * 3. Evaluate each aggregate call's argument and fold it into the group's accumulators
      * After processing all tuples, an iterator is initialized to return the results.
      */
     private void processChildTuples() {
         Tuple tuple;
         while ((tuple = child.getNextTuple()) != null) {
-            // Extract group key values (empty list if no grouping)
             List<Value> groupKey = new ArrayList<>();
             for (Integer index : groupByIndices) {
                 groupKey.add(tuple.getAttribute(index));
             }
 
-            // Get or create aggregates for this group
-            List<Integer> aggregates = groupAggregates.computeIfAbsent(groupKey, k ->
-                    new ArrayList<>(Collections.nCopies(sumExpressions.size(), 0)));
-
-            // Update aggregate values for this group
-            for (int i = 0; i < sumExpressions.size(); i++) {
-                Expression sumExpr = sumExpressions.get(i);
-                ExpressionEvaluator evaluator = evaluators.get(i);
-
-                if (sumExpr instanceof Function) {
-                    Function function = (Function) sumExpr;
-                    if (Constants.SUM_FUNCTION_NAME.equalsIgnoreCase(function.getName())) {
-                        Expression innerExpr = (Expression) function.getParameters().get(0);
-                        // Evaluate the expression for this tuple
-                        Value value = evaluator.evaluateValue(innerExpr, tuple);
-                        if (!(value instanceof IntValue iv)) {
-                            throw new QueryExecutionException(
-                                    "SUM requires int values; got " + value.typeName()
-                                            + " value '" + value + "' from expression '" + innerExpr + "'");
-                        }
-                        // Add to the current aggregate value
-                        aggregates.set(i, aggregates.get(i) + iv.v());
-                    }
+            List<Accumulator> accumulators = groupAggregates.computeIfAbsent(groupKey, k -> {
+                List<Accumulator> created = new ArrayList<>(aggregateCalls.size());
+                for (AggregateCall call : aggregateCalls) {
+                    created.add(Accumulator.create(call));
                 }
+                return created;
+            });
+
+            for (int i = 0; i < aggregateCalls.size(); i++) {
+                AggregateCall call = aggregateCalls.get(i);
+                Value value = call.argument() == null
+                        ? null
+                        : evaluators.get(i).evaluateValue(call.argument(), tuple);
+                accumulators.get(i).add(value);
             }
         }
 
-        // Initialize iterator for returning results
         resultIterator = groupAggregates.entrySet().iterator();
         processed = true;
     }
@@ -224,13 +203,30 @@ public class SumOperator extends Operator {
         return intermediateSchemaId;
     }
 
+    @Override
+    public String describe() {
+        StringBuilder sb = new StringBuilder("Aggregate[");
+        if (!groupByColumns.isEmpty()) {
+            sb.append("group by: ").append(groupByColumns.stream().map(Column::toString)
+                    .collect(Collectors.joining(", ")));
+        }
+        if (!aggregateCalls.isEmpty()) {
+            if (!groupByColumns.isEmpty()) {
+                sb.append("; ");
+            }
+            sb.append("calls: ").append(aggregateCalls.stream().map(AggregateCall::schemaKey)
+                    .collect(Collectors.joining(", ")));
+        }
+        return sb.append("]").toString();
+    }
+
     /**
      * Registers the schema for this operator.
      * Creates a schema for the aggregation result, mapping output column names and
      * aggregate function names to appropriate indices.
      * The schema includes:
      * 1. Group by columns selected for output
-     * 2. SUM aggregates with descriptive names
+     * 2. Aggregate calls keyed by their precomputed schema keys
      * Transformation details are recorded to track how the schema was derived,
      * which helps with column resolution in parent operators.
      */
@@ -266,29 +262,12 @@ public class SumOperator extends Operator {
             }
         }
 
-        // Add aggregate functions
-        for (int i = 0; i < sumExpressions.size(); i++) {
-            Expression sumExpr = sumExpressions.get(i);
-            if (sumExpr instanceof Function) {
-                Function function = (Function) sumExpr;
-                String functionName = function.getName();
-                ExpressionList params = function.getParameters();
-                Expression param = (Expression) params.get(0);
-
-                String aggregateKey;
-                if (param instanceof Column) {
-                    Column col = (Column) param;
-                    String tableName = col.getTable().getName();
-                    String columnName = col.getColumnName().toLowerCase();
-                    aggregateKey = functionName + "(" + tableName + "." + columnName + ")";
-                } else {
-                    aggregateKey = functionName + "(" + i + ")";
-                }
-
-                resultSchema.put(aggregateKey, colIndex);
-                transformationDetails.put(aggregateKey, "aggregate:" + i);
-                colIndex++;
-            }
+        // Add aggregate calls (keys precomputed by the planner, e.g. "SUM(student.b)")
+        for (int i = 0; i < aggregateCalls.size(); i++) {
+            AggregateCall call = aggregateCalls.get(i);
+            resultSchema.put(call.schemaKey(), colIndex);
+            transformationDetails.put(call.schemaKey(), "aggregate:" + i);
+            colIndex++;
         }
 
         // Register schema
