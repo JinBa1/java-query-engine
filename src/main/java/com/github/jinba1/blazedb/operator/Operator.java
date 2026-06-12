@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Abstract class representing a relational operator in BlazeDB, following the iterator model.
@@ -39,7 +40,7 @@ public abstract class Operator {
     protected final PlanContext ctx;
 
     protected Operator(PlanContext ctx) {
-        this.ctx = ctx;
+        this.ctx = Objects.requireNonNull(ctx, "PlanContext must not be null");
     }
 
     /** The per-query context this operator was planned under. */

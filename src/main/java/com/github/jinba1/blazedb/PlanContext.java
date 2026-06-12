@@ -21,7 +21,7 @@ public class PlanContext {
     private final Map<String, Map<String, String>> columnOriginMap = new HashMap<>();
 
     public PlanContext(QueryConfig config) {
-        this.config = config;
+        this.config = Objects.requireNonNull(config, "QueryConfig must not be null");
     }
 
     public QueryConfig config() {
