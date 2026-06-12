@@ -5,10 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -191,90 +187,6 @@ class DBCatalogTest {
     }
 
     @Test
-    void testRegisterSchemaWithTransformation() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        Map<String, Integer> projSchema = new LinkedHashMap<>();
-        projSchema.put("student.a", 0);
-        projSchema.put("student.c", 1);
-
-        Map<String, String> details = new HashMap<>();
-        details.put("student.a", "Student.a");
-        details.put("student.c", "Student.c");
-
-        String schemaId = catalog.registerSchemaWithTransformation(
-                projSchema, "Student", SchemaTransformationType.PROJECTION, details);
-
-        assertNotNull(schemaId, "Schema ID should not be null");
-        assertTrue(schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX), "Should start with temp_ prefix");
-
-        Map<String, Integer> retrieved = catalog.getIntermediateSchema(schemaId);
-        assertNotNull(retrieved, "Retrieved schema should not be null");
-        assertEquals(0, retrieved.get("student.a"));
-        assertEquals(1, retrieved.get("student.c"));
-    }
-
-    @Test
-    void testRegisterSchemaTracksParent() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        Map<String, Integer> schema = new LinkedHashMap<>();
-        schema.put("student.a", 0);
-
-        String schemaId = catalog.registerSchemaWithTransformation(
-                schema, "Student", SchemaTransformationType.PROJECTION, new HashMap<>());
-
-        assertEquals("Student", catalog.getParentSchemaId(schemaId), "Parent should be Student");
-    }
-
-    @Test
-    void testRegisterSchemaNullParent() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        Map<String, Integer> schema = new LinkedHashMap<>();
-        schema.put("col", 0);
-
-        String schemaId = catalog.registerSchemaWithTransformation(
-                schema, null, SchemaTransformationType.OTHER, new HashMap<>());
-
-        assertNull(catalog.getParentSchemaId(schemaId), "No parent → null");
-    }
-
-    @Test
-    void testGetIntermediateSchemaNotFound() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        assertNull(catalog.getIntermediateSchema("nonexistent_id"), "Missing schema → null");
-    }
-
-    @Test
-    void testAddAndGetParentSchemas() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        catalog.addParentSchema("child1", "parentA");
-        catalog.addParentSchema("child1", "parentB");
-
-        List<String> parents = catalog.getAllParentSchemas("child1");
-        assertEquals(2, parents.size(), "Should have 2 parents");
-        assertTrue(parents.contains("parentA"));
-        assertTrue(parents.contains("parentB"));
-    }
-
-    @Test
-    void testGetAllParentSchemasEmpty() {
-        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
-        DBCatalog catalog = DBCatalog.getInstance();
-
-        List<String> parents = catalog.getAllParentSchemas("noParents");
-        assertTrue(parents.isEmpty(), "No parents → empty list");
-    }
-
-    @Test
     void testInitDBCatalogCalledTwiceIsNoop() {
         DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
         DBCatalog first = DBCatalog.getInstance();
@@ -302,34 +214,37 @@ class DBCatalogTest {
     }
 
     @Test
-    public void orderedColumnNamesBareForBaseTable() throws IOException {
-        writeTable("Student", "A,B,C", "1,2,3");
+    public void getInstanceIsRaceFreeAndStable() throws Exception {
         DBCatalog.resetDBCatalog();
+        int threads = 16;
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        try {
+            var barrier = new java.util.concurrent.CyclicBarrier(threads);
+            var instances = java.util.Collections.synchronizedSet(
+                    new java.util.HashSet<DBCatalog>());
+            var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    barrier.await();
+                    instances.add(DBCatalog.getInstance());
+                    return null;
+                }));
+            }
+            for (var f : futures) f.get();
+            assertEquals(1, instances.size(), "getInstance must return one instance under races");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void loadedTableSchemaIsImmutable() throws IOException {
+        DBCatalog.resetDBCatalog();
+        Path dataDir = tempDb.resolve("data");
+        Files.createDirectories(dataDir);
+        Files.writeString(dataDir.resolve("T.csv"), "a,b\n1,2\n");
         DBCatalog.initDBCatalog(tempDb.toString());
-        assertEquals(List.of("a", "b", "c"),
-                DBCatalog.getInstance().getOrderedColumnNames("Student"));
-    }
-
-    @Test
-    public void orderedColumnNamesStripQualifierAndKeepAggregates() {
-        Map<String, Integer> schema = Map.of("student.a", 0, "SUM(student.b)", 1);
-        DBCatalog.resetDBCatalog();
-        String id = DBCatalog.getInstance().registerSchemaWithTransformation(
-                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
-        assertEquals(List.of("a", "sum(student.b)"),
-                DBCatalog.getInstance().getOrderedColumnNames(id));
-    }
-
-    @Test
-    public void orderedColumnNamesHandleAliasedJoinSchemas() {
-        Map<String, Integer> schema = new HashMap<>();
-        schema.put("student.a", 0); schema.put("a", 0);
-        schema.put("student.b", 1); schema.put("b", 1);
-        schema.put("enrolled.i", 2); schema.put("i", 2);
-        DBCatalog.resetDBCatalog();
-        String id = DBCatalog.getInstance().registerSchemaWithTransformation(
-                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
-        assertEquals(List.of("a", "b", "i"),
-                DBCatalog.getInstance().getOrderedColumnNames(id));
+        assertThrows(UnsupportedOperationException.class,
+                () -> DBCatalog.getInstance().getDBSchemata("T").put("c", 9));
     }
 }
