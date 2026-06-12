@@ -35,22 +35,22 @@ public class QueryPlanOptimizer {
      * @param rootOp The root operator of the query plan to optimize
      * @return The optimized query plan
      */
-    public static Operator optimize(Operator rootOp) {
+    public static Operator optimize(PlanContext ctx, Operator rootOp) {
 
         // Apply optimization rules in a specific order
         // First, push filtering operations down
-        rootOp = pushSelectionsDown(rootOp);
-        rootOp = pushProjectionsDown(rootOp);
+        rootOp = pushSelectionsDown(ctx, rootOp);
+        rootOp = pushProjectionsDown(ctx, rootOp);
 
         // Update schema information after push-down operations
         rootOp.updateSchema();
 
         // Then, combine operators where possible
-        rootOp = combineConsecutiveSelects(rootOp);
+        rootOp = combineConsecutiveSelects(ctx, rootOp);
 
         // Finally, remove unnecessary operators
-        rootOp = removeUnnecessaryProjects(rootOp);
-        rootOp = removeUnnecessarySelects(rootOp);
+        rootOp = removeUnnecessaryProjects(ctx, rootOp);
+        rootOp = removeUnnecessarySelects(ctx, rootOp);
         return rootOp;
     }
 
@@ -60,21 +60,21 @@ public class QueryPlanOptimizer {
      * @param op The operator to optimize
      * @return The optimized operator
      */
-    private static Operator removeUnnecessaryProjects(Operator op) {
+    private static Operator removeUnnecessaryProjects(PlanContext ctx, Operator op) {
         if (op == null) {
             return null;
         }
 
         // Recursive case: optimize child operators first
         if (op.hasChild()) {
-            Operator optimizedChild = removeUnnecessaryProjects(op.getChild());
+            Operator optimizedChild = removeUnnecessaryProjects(ctx, op.getChild());
 
             // If this is a ProjectOperator, check if it's necessary
             if (op instanceof ProjectOperator) {
                 ProjectOperator projectOp = (ProjectOperator) op;
 
                 // Check if this project is trivial (doesn't eliminate any columns)
-                if (isProjectTrivial(projectOp, optimizedChild)) {
+                if (isProjectTrivial(ctx, projectOp, optimizedChild)) {
                     return optimizedChild; // Skip this ProjectOperator
                 }
 
@@ -90,7 +90,7 @@ public class QueryPlanOptimizer {
         // Special case for JoinOperator which has two children
         if (op instanceof JoinOperator) {
             JoinOperator joinOp = (JoinOperator) op;
-            Operator optimizedOuterChild = removeUnnecessaryProjects(joinOp.getOuterChild());
+            Operator optimizedOuterChild = removeUnnecessaryProjects(ctx, joinOp.getOuterChild());
             joinOp.setOuterChild(optimizedOuterChild);
         }
 
@@ -104,7 +104,7 @@ public class QueryPlanOptimizer {
      * @param childOp The child operator
      * @return true if the projection is trivial, false otherwise
      */
-    private static boolean isProjectTrivial(ProjectOperator projectOp, Operator childOp) {
+    private static boolean isProjectTrivial(PlanContext ctx, ProjectOperator projectOp, Operator childOp) {
         List<Column> projectedColumns = projectOp.getColumns();
 
         // If projecting zero columns, it's definitely not trivial
@@ -119,7 +119,7 @@ public class QueryPlanOptimizer {
 
         // Get child schema to compare column sets
         String childSchemaId = childOp.propagateSchemaId();
-        Map<String, Integer> childSchema = getOperatorSchema(childSchemaId);
+        Map<String, Integer> childSchema = ctx.getSchema(childSchemaId);
 
         if (childSchema == null) {
             return false;
@@ -156,33 +156,18 @@ public class QueryPlanOptimizer {
     }
 
     /**
-     * Gets the schema for an operator by ID, handling both base and intermediate schemas.
-     * @param schemaId The schema ID to retrieve
-     * @return The schema as a map from column names to indices
-     */
-    public static Map<String, Integer> getOperatorSchema(String schemaId) {
-        if (schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
-            // For intermediate schemas
-            return DBCatalog.getInstance().getIntermediateSchema(schemaId);
-        } else {
-            // For base table schemas
-            return DBCatalog.getInstance().getDBSchemata(schemaId);
-        }
-    }
-
-    /**
      * Removes SelectOperators with conditions that are always true.
      * @param op The operator to optimize
      * @return The optimized operator
      */
-    private static Operator removeUnnecessarySelects(Operator op) {
+    private static Operator removeUnnecessarySelects(PlanContext ctx, Operator op) {
         if (op == null) {
             return null;
         }
 
         // Recursive case: optimize child operators first
         if (op.hasChild()) {
-            Operator optimizedChild = removeUnnecessarySelects(op.getChild());
+            Operator optimizedChild = removeUnnecessarySelects(ctx, op.getChild());
 
             // If this is a SelectOperator, check if it's necessary
             if (op instanceof SelectOperator) {
@@ -205,7 +190,7 @@ public class QueryPlanOptimizer {
         // Special case for JoinOperator which has two children
         if (op instanceof JoinOperator) {
             JoinOperator joinOp = (JoinOperator) op;
-            Operator optimizedOuterChild = removeUnnecessarySelects(joinOp.getOuterChild());
+            Operator optimizedOuterChild = removeUnnecessarySelects(ctx, joinOp.getOuterChild());
             joinOp.setOuterChild(optimizedOuterChild);
         }
 
@@ -241,14 +226,14 @@ public class QueryPlanOptimizer {
      * @param op The operator to optimize
      * @return The optimized operator
      */
-    private static Operator combineConsecutiveSelects(Operator op) {
+    private static Operator combineConsecutiveSelects(PlanContext ctx, Operator op) {
         if (op == null) {
             return null;
         }
 
         // Recursive case: optimize child operators first
         if (op.hasChild()) {
-            Operator optimizedChild = combineConsecutiveSelects(op.getChild());
+            Operator optimizedChild = combineConsecutiveSelects(ctx, op.getChild());
 
             // If this is a SelectOperator and its child is also a SelectOperator,
             // combine them
@@ -262,7 +247,7 @@ public class QueryPlanOptimizer {
                         childSelect.getCondition()
                 );
                 // Create a new SelectOperator with the combined condition
-                return new SelectOperator(childSelect.getChild(), combinedCondition);
+                return new SelectOperator(ctx, childSelect.getChild(), combinedCondition);
             }
 
             // No combination possible, just update the child
@@ -272,7 +257,7 @@ public class QueryPlanOptimizer {
         // Special case for JoinOperator which has two children
         if (op instanceof JoinOperator) {
             JoinOperator joinOp = (JoinOperator) op;
-            Operator optimizedOuterChild = combineConsecutiveSelects(joinOp.getOuterChild());
+            Operator optimizedOuterChild = combineConsecutiveSelects(ctx, joinOp.getOuterChild());
             joinOp.setOuterChild(optimizedOuterChild);
         }
 
@@ -286,7 +271,7 @@ public class QueryPlanOptimizer {
      * @param op The operator to optimize
      * @return The optimized operator
      */
-    private static Operator pushSelectionsDown(Operator op) {
+    private static Operator pushSelectionsDown(PlanContext ctx, Operator op) {
         if (op == null) return null;
 
         // Process selections at the current level
@@ -298,24 +283,24 @@ public class QueryPlanOptimizer {
             List<Expression> splitConditions = splitAndConditions(condition);
 
             if (splitConditions.size() > 1) {
-                return handleSplitSelectionConditions(selectOp, splitConditions);
+                return handleSplitSelectionConditions(ctx, selectOp, splitConditions);
             }
 
             // Try to push the single selection down
             if (selectOp.getChild() instanceof JoinOperator) {
-                return pushSelectionIntoJoin(selectOp);
+                return pushSelectionIntoJoin(ctx, selectOp);
             }
         }
 
         // Recursively process children
         if (op.hasChild()) {
-            op.setChild(pushSelectionsDown(op.getChild()));
+            op.setChild(pushSelectionsDown(ctx, op.getChild()));
         }
 
         // Special case for JoinOperator's outer child
         if (op instanceof JoinOperator) {
             JoinOperator joinOp = (JoinOperator) op;
-            joinOp.setOuterChild(pushSelectionsDown(joinOp.getOuterChild()));
+            joinOp.setOuterChild(pushSelectionsDown(ctx, joinOp.getOuterChild()));
         }
 
         return op;
@@ -328,7 +313,7 @@ public class QueryPlanOptimizer {
      * @return The optimized operator structure
      */
     private static Operator handleSplitSelectionConditions(
-            SelectOperator selectOp, List<Expression> splitConditions) {
+            PlanContext ctx, SelectOperator selectOp, List<Expression> splitConditions) {
         // Get the underlying child
         Operator baseChild = selectOp.getChild();
 
@@ -336,10 +321,10 @@ public class QueryPlanOptimizer {
         for (Expression splitCondition : splitConditions) {
 
             // Create a temporary SelectOperator for this condition
-            SelectOperator tempSelect = new SelectOperator(baseChild, splitCondition);
+            SelectOperator tempSelect = new SelectOperator(ctx, baseChild, splitCondition);
 
             // Try to push it down
-            Operator optimizedOp = pushSelectionsDown(tempSelect);
+            Operator optimizedOp = pushSelectionsDown(ctx, tempSelect);
 
             // If optimization changed the operator type, it was pushed down
             if (!(optimizedOp instanceof SelectOperator)) {
@@ -358,7 +343,7 @@ public class QueryPlanOptimizer {
      * @param selectOp The SelectOperator to push down
      * @return The optimized operator
      */
-    private static Operator pushSelectionIntoJoin(SelectOperator selectOp) {
+    private static Operator pushSelectionIntoJoin(PlanContext ctx, SelectOperator selectOp) {
         JoinOperator joinOp = (JoinOperator) selectOp.getChild();
         Expression condition = selectOp.getCondition();
 
@@ -366,17 +351,17 @@ public class QueryPlanOptimizer {
         Set<String> tablesInCondition = extractTableNames(condition);
         String outerSchemaId = joinOp.getOuterChild().propagateSchemaId();
         String innerSchemaId = joinOp.getChild().propagateSchemaId();
-        Set<String> outerTables = getTablesInSchema(outerSchemaId);
-        Set<String> innerTables = getTablesInSchema(innerSchemaId);
+        Set<String> outerTables = getTablesInSchema(ctx, outerSchemaId);
+        Set<String> innerTables = getTablesInSchema(ctx, innerSchemaId);
         // Check if condition applies to only outer child
         if (outerTables.containsAll(tablesInCondition)) {
-            joinOp.setOuterChild(new SelectOperator(joinOp.getOuterChild(), condition));
+            joinOp.setOuterChild(new SelectOperator(ctx, joinOp.getOuterChild(), condition));
             return joinOp;
         }
 
         // Check if condition applies to only inner child
         if (innerTables.containsAll(tablesInCondition)) {
-            joinOp.setChild(new SelectOperator(joinOp.getChild(), condition));
+            joinOp.setChild(new SelectOperator(ctx, joinOp.getChild(), condition));
             return joinOp;
         }
 
@@ -432,12 +417,12 @@ public class QueryPlanOptimizer {
      * @param schemaId The schema ID to check
      * @return A set of table names in the schema
      */
-    private static Set<String> getTablesInSchema(String schemaId) {
+    private static Set<String> getTablesInSchema(PlanContext ctx, String schemaId) {
         Set<String> tables = new HashSet<>();
 
         if (schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
             // For intermediate schemas, extract table names from column keys
-            Map<String, Integer> schema = DBCatalog.getInstance().getIntermediateSchema(schemaId);
+            Map<String, Integer> schema = ctx.getIntermediateSchema(schemaId);
             if (schema != null) {
                 for (String key : schema.keySet()) {
                     int dotIndex = key.indexOf('.');
@@ -461,7 +446,7 @@ public class QueryPlanOptimizer {
      * @param rootOp The root operator of the plan
      * @return The optimized plan with pushed-down projections
      */
-    private static Operator pushProjectionsDown(Operator rootOp) {
+    private static Operator pushProjectionsDown(PlanContext ctx, Operator rootOp) {
 
         // Find ProjectOperator and collect required columns from operators above it
         ProjectOperatorInfo projectInfo = findProjectOperator(rootOp, new HashSet<>());
@@ -471,6 +456,7 @@ public class QueryPlanOptimizer {
             if (!projectInfo.requiredColumns.isEmpty()) {
                 // Push the projection down with the required columns
                 Operator optimizedChild = pushProjectionDown(
+                        ctx,
                         projectInfo.projectOp.getChild(),
                         projectInfo.requiredColumns
                 );
@@ -563,30 +549,30 @@ public class QueryPlanOptimizer {
      * @param requiredColumns The set of columns required at this level
      * @return The optimized operator tree
      */
-    private static Operator pushProjectionDown(Operator op, Set<Column> requiredColumns) {
+    private static Operator pushProjectionDown(PlanContext ctx, Operator op, Set<Column> requiredColumns) {
         if (op == null) {
             return null;
         }
 
         // Handle different operator types
         if (op instanceof SelectOperator) {
-            return pushProjectionThroughSelect(op, requiredColumns);
+            return pushProjectionThroughSelect(ctx, op, requiredColumns);
         }
         else if (op instanceof JoinOperator) {
-            return pushProjectionThroughJoin(op, requiredColumns);
+            return pushProjectionThroughJoin(ctx, op, requiredColumns);
         }
         else if (op instanceof ScanOperator) {
-            return pushProjectionThroughScan(op, requiredColumns);
+            return pushProjectionThroughScan(ctx, op, requiredColumns);
         }
         else if (op instanceof DuplicateEliminationOperator ||
                 op instanceof SortOperator ||
                 op instanceof AggregateOperator) {
-            return pushProjectionThroughPassthroughOp(op, requiredColumns);
+            return pushProjectionThroughPassthroughOp(ctx, op, requiredColumns);
         }
 
         // Default case: if operator has a child, recursively optimize it
         if (op.hasChild()) {
-            Operator optimizedChild = pushProjectionDown(op.getChild(), requiredColumns);
+            Operator optimizedChild = pushProjectionDown(ctx, op.getChild(), requiredColumns);
             op.setChild(optimizedChild);
         }
 
@@ -600,7 +586,7 @@ public class QueryPlanOptimizer {
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree
      */
-    private static Operator pushProjectionThroughSelect(Operator op, Set<Column> requiredColumns) {
+    private static Operator pushProjectionThroughSelect(PlanContext ctx, Operator op, Set<Column> requiredColumns) {
         SelectOperator selectOp = (SelectOperator) op;
         Expression condition = selectOp.getCondition();
 
@@ -609,7 +595,7 @@ public class QueryPlanOptimizer {
         addConditionColumns(condition, enhancedRequiredColumns);
 
         // Recursively push projection down
-        Operator optimizedChild = pushProjectionDown(selectOp.getChild(), enhancedRequiredColumns);
+        Operator optimizedChild = pushProjectionDown(ctx, selectOp.getChild(), enhancedRequiredColumns);
         selectOp.setChild(optimizedChild);
 
         return selectOp;
@@ -633,7 +619,7 @@ public class QueryPlanOptimizer {
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree
      */
-    private static Operator pushProjectionThroughJoin(Operator op, Set<Column> requiredColumns) {
+    private static Operator pushProjectionThroughJoin(PlanContext ctx, Operator op, Set<Column> requiredColumns) {
         JoinOperator joinOp = (JoinOperator) op;
 
         // First add columns used in join condition
@@ -647,6 +633,7 @@ public class QueryPlanOptimizer {
         Set<Column> leftColumns = new HashSet<>();
         Set<Column> rightColumns = new HashSet<>();
         splitColumnsByTable(
+                ctx,
                 enhancedRequiredColumns,
                 joinOp.getOuterChild().propagateSchemaId(),
                 joinOp.getChild().propagateSchemaId(),
@@ -657,14 +644,14 @@ public class QueryPlanOptimizer {
         // Recursively push down to both children
         Operator optimizedOuterChild;
         if (!leftColumns.isEmpty()) {
-            optimizedOuterChild = pushProjectionDown(joinOp.getOuterChild(), leftColumns);
+            optimizedOuterChild = pushProjectionDown(ctx, joinOp.getOuterChild(), leftColumns);
         } else {
             optimizedOuterChild = joinOp.getOuterChild();
         }
 
         Operator optimizedInnerChild;
         if (!rightColumns.isEmpty()) {
-            optimizedInnerChild = pushProjectionDown(joinOp.getChild(), rightColumns);
+            optimizedInnerChild = pushProjectionDown(ctx, joinOp.getChild(), rightColumns);
         } else {
             optimizedInnerChild = joinOp.getChild();
         }
@@ -684,14 +671,15 @@ public class QueryPlanOptimizer {
      * @param rightColumns Output set for right side columns
      */
     private static void splitColumnsByTable(
+            PlanContext ctx,
             Set<Column> allColumns,
             String outerSchemaId,
             String innerSchemaId,
             Set<Column> leftColumns,
             Set<Column> rightColumns) {
 
-        Set<String> outerTables = getTablesInSchema(outerSchemaId);
-        Set<String> innerTables = getTablesInSchema(innerSchemaId);
+        Set<String> outerTables = getTablesInSchema(ctx, outerSchemaId);
+        Set<String> innerTables = getTablesInSchema(ctx, innerSchemaId);
 
         for (Column col : allColumns) {
             String tableName = col.getTable().getName();
@@ -715,7 +703,7 @@ public class QueryPlanOptimizer {
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree
      */
-    private static Operator pushProjectionThroughScan(Operator op, Set<Column> requiredColumns) {
+    private static Operator pushProjectionThroughScan(PlanContext ctx, Operator op, Set<Column> requiredColumns) {
         ScanOperator scanOp = (ScanOperator) op;
         String tableName = scanOp.getTableName();
 
@@ -741,7 +729,7 @@ public class QueryPlanOptimizer {
         // If we're not selecting all columns, add a projection
         Map<String, Integer> tableSchema = DBCatalog.getInstance().getDBSchemata(tableName);
         if (tableColumns.size() < tableSchema.size()) {
-            return new ProjectOperator(scanOp, tableColumns);
+            return new ProjectOperator(ctx, scanOp, tableColumns);
         }
 
         return scanOp;
@@ -755,12 +743,12 @@ public class QueryPlanOptimizer {
      * @param requiredColumns Columns required by parent operators
      * @return The optimized operator tree
      */
-    private static Operator pushProjectionThroughPassthroughOp(Operator op, Set<Column> requiredColumns) {
+    private static Operator pushProjectionThroughPassthroughOp(PlanContext ctx, Operator op, Set<Column> requiredColumns) {
         if (requiredColumns.isEmpty()) {
             return op; // Don't push empty projections
         }
 
-        Operator optimizedChild = pushProjectionDown(op.getChild(), requiredColumns);
+        Operator optimizedChild = pushProjectionDown(ctx, op.getChild(), requiredColumns);
         op.setChild(optimizedChild);
         return op;
     }

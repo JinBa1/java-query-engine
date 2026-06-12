@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.Tuple;
 
 import java.util.*;
@@ -22,7 +23,8 @@ public class DuplicateEliminationOperator extends Operator {
      * Constructs a DuplicateEliminationOperator with the given child operator.
      * @param child The child operator from which to read tuples
      */
-    public DuplicateEliminationOperator(Operator child) {
+    public DuplicateEliminationOperator(PlanContext ctx, Operator child) {
+        super(ctx);
         this.child = child;
         this.uniqueTuples = new ArrayList<>();
         this.processed = false;
@@ -106,8 +108,8 @@ public class DuplicateEliminationOperator extends Operator {
 
     /**
      * Registers the schema for this operator.
-     * Creates a schema identical to the child operator's schema, since sorting
-     * does not change the structure of tuples, only their order.
+     * Creates a schema identical to the child operator's schema, since duplicate
+     * elimination does not change the structure of tuples.
      * Transformation details are recorded.
      */
     @Override

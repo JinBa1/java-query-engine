@@ -1,6 +1,8 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.PlanContext;
+import com.github.jinba1.blazedb.QueryConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,6 +18,8 @@ public class CachedOperatorTest {
     @TempDir
     Path tempDb;
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         Path data = tempDb.resolve("data");
@@ -23,6 +27,7 @@ public class CachedOperatorTest {
         Files.write(data.resolve("N.csv"), List.of("n", "1", "2", "3"));
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     private static int drain(Operator op) {
@@ -33,7 +38,7 @@ public class CachedOperatorTest {
 
     @Test
     public void replaysSourceTuplesAndResets() {
-        CachedOperator cached = new CachedOperator(new ScanOperator("N"));
+        CachedOperator cached = new CachedOperator(new ScanOperator(ctx, "N"));
         assertEquals(3, drain(cached));
         assertNull(cached.getNextTuple());
         cached.reset();
@@ -42,11 +47,11 @@ public class CachedOperatorTest {
 
     @Test
     public void passesThroughSourceSchema() {
-        ScanOperator scan = new ScanOperator("N");
+        ScanOperator scan = new ScanOperator(ctx, "N");
         String schemaId = scan.propagateSchemaId();
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
-        CachedOperator cached = new CachedOperator(new ScanOperator("N"));
+        CachedOperator cached = new CachedOperator(new ScanOperator(ctx, "N"));
         assertEquals(schemaId, cached.propagateSchemaId());
     }
 }

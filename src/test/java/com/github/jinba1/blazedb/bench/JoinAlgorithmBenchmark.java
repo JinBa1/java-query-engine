@@ -1,6 +1,8 @@
 package com.github.jinba1.blazedb.bench;
 
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.PlanContext;
+import com.github.jinba1.blazedb.QueryConfig;
 import com.github.jinba1.blazedb.operator.CachedOperator;
 import com.github.jinba1.blazedb.operator.HashJoinOperator;
 import com.github.jinba1.blazedb.operator.JoinOperator;
@@ -46,6 +48,7 @@ public class JoinAlgorithmBenchmark {
 
     private Path dbDir;
     private Expression joinCondition;
+    private PlanContext ctx;
     private CachedOperator cachedOuter;
     private CachedOperator cachedInner;
 
@@ -74,8 +77,9 @@ public class JoinAlgorithmBenchmark {
         // CSV parsing happens here, outside the measured methods.
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(dbDir.toString());
-        cachedOuter = new CachedOperator(new ScanOperator("L"));
-        cachedInner = new CachedOperator(new ScanOperator("R"));
+        ctx = new PlanContext(QueryConfig.defaults());
+        cachedOuter = new CachedOperator(new ScanOperator(ctx, "L"));
+        cachedInner = new CachedOperator(new ScanOperator(ctx, "R"));
     }
 
     @TearDown(Level.Trial)
@@ -87,12 +91,12 @@ public class JoinAlgorithmBenchmark {
 
     @Benchmark
     public void nestedLoopJoin(Blackhole bh) {
-        drain(new JoinOperator(cachedOuter, cachedInner, joinCondition), bh);
+        drain(new JoinOperator(ctx, cachedOuter, cachedInner, joinCondition), bh);
     }
 
     @Benchmark
     public void hashJoin(Blackhole bh) {
-        drain(new HashJoinOperator(cachedOuter, cachedInner, joinCondition), bh);
+        drain(new HashJoinOperator(ctx, cachedOuter, cachedInner, joinCondition), bh);
     }
 
     private static void drain(Operator op, Blackhole bh) {

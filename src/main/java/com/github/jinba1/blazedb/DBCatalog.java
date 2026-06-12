@@ -13,19 +13,17 @@ import java.util.*;
 import java.util.stream.Stream;
 
 /**
- * The DBCatalog class serves as a central repository for database metadata in BlazeDB.
+ * The DBCatalog class serves as a central repository for durable database metadata in BlazeDB.
  * It implements the singleton pattern to ensure a single, consistent view of database structure
  * across all components of the system.
  * This class maintains information about:
  * 1. Database table locations on disk
  * 2. Table schemas (column names and their positions)
  * 3. Column types inferred from CSV data
- * 4. Intermediate schemas generated during query processing
- * 5. Schema transformation tracking for operations like projection and join
- * The catalog provides methods to register, retrieve, and resolve schema information,
- * supporting the dynamic schema transformations that occur during query execution.
- * It plays a critical role in column name resolution during expression evaluation
- * and is essential for query optimisations.
+ * Per-query schema tracking (intermediate schemas, transformation history, column origins)
+ * lives in {@link PlanContext}, not here.
+ * The durable maps are backed by ConcurrentHashMap so that a future REST server can upload
+ * tables at runtime while N queries read concurrently without external locking.
  */
 public class DBCatalog {
 
@@ -35,26 +33,13 @@ public class DBCatalog {
     private final Map<String, Map<String, Integer>> dbSchemata;
     private final Map<String, List<ColumnType>> dbColumnTypes;
 
-    private final Map<String, Map<String, Integer>> intermediateSchemata;
-
-    // Add schema transformation tracking
-    private final Map<String, String> schemaParentMap; // child schema ID -> parent schema ID
-
-    private final Map<String, List<String>> schemaMultiParentMap;
-
-    private final Map<String, Map<String, String>> columnOriginMap;
-
     /**
      * Private constructor to ensure singleton design.
      */
     private DBCatalog() {
-        dbLocations = new HashMap<>();
-        dbSchemata = new HashMap<>();
-        dbColumnTypes = new HashMap<>();
-        intermediateSchemata = new HashMap<>();
-        schemaParentMap = new HashMap<>();
-        schemaMultiParentMap = new HashMap<>();
-        columnOriginMap = new HashMap<>();
+        dbLocations = new java.util.concurrent.ConcurrentHashMap<>();
+        dbSchemata = new java.util.concurrent.ConcurrentHashMap<>();
+        dbColumnTypes = new java.util.concurrent.ConcurrentHashMap<>();
     }
 
     /**
@@ -62,7 +47,7 @@ public class DBCatalog {
      * Creates a new instance if one does not already exist.
      * @return The singleton DBCatalog instance
      */
-    public static DBCatalog getInstance() {
+    public static synchronized DBCatalog getInstance() {
         if (instance == null) {
             instance = new DBCatalog();
             System.out.println("Created DBCatalog, but haven't load content, use initDBCatalog() instead");
@@ -75,7 +60,7 @@ public class DBCatalog {
      * This method should be called before using the catalog for the first time.
      * @param dBDirectory The directory containing database data files
      */
-    public static void initDBCatalog(String dBDirectory) {
+    public static synchronized void initDBCatalog(String dBDirectory) {
         if (instance == null) {
             instance = new DBCatalog();
             instance.loadDBCatalog(dBDirectory);
@@ -86,7 +71,7 @@ public class DBCatalog {
      * Resets the DBCatalog instance to null, effectively clearing all stored information.
      * Primarily used for testing or when switching database contexts.
      */
-    public static void resetDBCatalog() {
+    public static synchronized void resetDBCatalog() {
         instance = null;
     }
 
@@ -158,8 +143,8 @@ public class DBCatalog {
                 types.add(isInt[i] ? ColumnType.INT : ColumnType.STRING);
             }
 
-            dbSchemata.put(tableName, columnMap);
-            dbColumnTypes.put(tableName, types);
+            dbSchemata.put(tableName, Collections.unmodifiableMap(columnMap));
+            dbColumnTypes.put(tableName, Collections.unmodifiableList(types));
             dbLocations.put(tableName, csv);
         }
     }
@@ -222,213 +207,5 @@ public class DBCatalog {
             return false;
         }
         return dbSchemata.get(tableName).containsKey(columnName.toLowerCase());
-    }
-
-    /**
-     * Helper method for registering schema transformation.
-     * Registers an intermediate schema created during query processing.
-     * Intermediate schemas are used by operators like Project and Join
-     * that transform the structure of input data.
-     * @param schema A map representing the new schema structure
-     * @return A unique identifier for the registered schema
-     */
-    private String registerIntermediateSchema(Map<String, Integer> schema) {
-        String schemaId = Constants.INTERMEDIATE_SCHEMA_PREFIX + UUID.randomUUID().toString().substring(0, 8);
-        intermediateSchemata.put(schemaId, schema);
-        return schemaId;
-    }
-
-    /**
-     * Retrieves an intermediate schema by its identifier.
-     * @param schemaId The unique identifier of the intermediate schema
-     * @return The schema mapping, or null if the schema ID is not found
-     */
-    public Map<String, Integer> getIntermediateSchema(String schemaId) {
-        if (!intermediateSchemata.containsKey(schemaId)) {
-            return null;
-        }
-        return intermediateSchemata.get(schemaId);
-    }
-
-    /**
-     * Registers a schema with transformation information.
-     * This enhanced registration tracks how the schema was derived from parent schemas,
-     * which is useful for column resolution and optimization.
-     * @param schema The schema mapping
-     * @param parentSchemaId The ID of the parent schema, or null if none
-     * @param type The type of transformation (projection, join, etc.)
-     * @param transformationDetails Details about the transformation
-     * @return A unique identifier for the registered schema
-     */
-    public String registerSchemaWithTransformation(Map<String, Integer> schema,
-                                                   String parentSchemaId,
-                                                   SchemaTransformationType type,
-                                                   Map<String, String> transformationDetails) {
-        String schemaId = registerIntermediateSchema(schema);
-
-        // Record parent relationship
-        if (parentSchemaId != null) {
-            schemaParentMap.put(schemaId, parentSchemaId);
-        }
-
-        // Track column origins for the new schema
-        Map<String, String> originMap = new HashMap<>();
-        columnOriginMap.put(schemaId, originMap);
-
-        // For each column in the new schema, record its origin
-        for (Map.Entry<String, String> detail : transformationDetails.entrySet()) {
-            if (detail.getKey().contains(".")) {
-                originMap.put(detail.getKey(), detail.getKey()); // Self-reference for existing qualified names
-            }
-        }
-
-        return schemaId;
-    }
-
-    /**
-     * Returns the parent schema ID for a given schema.
-     * @param schemaId The schema ID to look up
-     * @return The parent schema ID, or null if none exists
-     */
-    public String getParentSchemaId(String schemaId) {
-        return schemaParentMap.get(schemaId);
-    }
-
-    /**
-     * Adds a parent schema relationship.
-     * Used for operators with multiple inputs like JOIN.
-     * @param childSchemaId The child schema ID
-     * @param parentSchemaId The parent schema ID to add
-     */
-    public void addParentSchema(String childSchemaId, String parentSchemaId) {
-        schemaMultiParentMap.computeIfAbsent(childSchemaId, k -> new ArrayList<>())
-                .add(parentSchemaId);
-    }
-
-    /**
-     * Returns all parent schemas for a given schema.
-     * @param schemaId The schema ID to look up
-     * @return A list of parent schema IDs
-     */
-    public List<String> getAllParentSchemas(String schemaId) {
-        return schemaMultiParentMap.getOrDefault(schemaId, Collections.emptyList());
-    }
-
-    /**
-     * Gets a schema map by ID, handling both base and intermediate schemas.
-     * @param schemaId The schema ID to retrieve
-     * @return The schema mapping
-     */
-    private Map<String, Integer> getSchema(String schemaId) {
-        if (schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
-            return intermediateSchemata.get(schemaId);
-        } else {
-            return dbSchemata.get(schemaId);
-        }
-    }
-
-    /**
-     * Result-header names for a schema, in column order.
-     * Plain columns are bare-ified (qualifier stripped: "student.a" -> "a");
-     * aggregate keys (containing '(') are kept whole, lowercased.
-     * Schemas may contain alias keys (bare and qualified forms mapping to the
-     * same index), so column count is max index + 1, not map size; keys are
-     * visited in sorted order so the chosen name is deterministic.
-     */
-    public List<String> getOrderedColumnNames(String schemaId) {
-        Map<String, Integer> schema = getSchema(schemaId);
-        if (schema == null) {
-            throw new QueryExecutionException("Unknown schema: " + schemaId);
-        }
-        int width = 0;
-        for (Integer idx : schema.values()) {
-            if (idx + 1 > width) width = idx + 1;
-        }
-        String[] names = new String[width];
-        List<String> keys = new ArrayList<>(schema.keySet());
-        Collections.sort(keys);
-        for (String key : keys) {
-            int idx = schema.get(key);
-            String name = key.toLowerCase();
-            if (!name.contains("(")) {
-                int dot = name.lastIndexOf('.');
-                if (dot >= 0) name = name.substring(dot + 1);
-            }
-            if (names[idx] == null) {
-                names[idx] = name;
-            }
-        }
-        for (int i = 0; i < width; i++) {
-            if (names[i] == null) {
-                throw new QueryExecutionException(
-                        "Schema '" + schemaId + "' has no column name for index " + i);
-            }
-        }
-        return Arrays.asList(names);
-    }
-
-    /**
-     * Column resolution that considers origin tracking information.
-     * This method first tries direct resolution with smartResolveColumnIndex,
-     * then attempts resolution through origin tracking, and finally tries
-     * parent schemas recursively.
-     * @param schemaId The schema ID to start resolution from
-     * @param tableName The table name in the column reference
-     * @param columnName The column name to resolve
-     * @return The resolved column index, or null if not found
-     */
-    public Integer resolveColumnWithOrigins(String schemaId, String tableName, String columnName) {
-        // Try direct resolution first
-        Integer directIndex = smartResolveColumnIndex(schemaId, tableName, columnName);
-        if (directIndex != null) return directIndex;
-
-        // Try resolving through origin tracking
-        Map<String, String> originMap = columnOriginMap.get(schemaId);
-        if (originMap != null) {
-            String lookupKey = tableName + "." + columnName.toLowerCase();
-
-            // Look for any column that maps to this original name
-            for (Map.Entry<String, String> entry : originMap.entrySet()) {
-                if (entry.getValue().equalsIgnoreCase(lookupKey)) {
-                    return getIntermediateSchema(schemaId).get(entry.getKey());
-                }
-            }
-        }
-
-        // Try parent schemas if needed
-        List<String> parents = getAllParentSchemas(schemaId);
-        for (String parent : parents) {
-            Integer parentResult = resolveColumnWithOrigins(parent, tableName, columnName);
-            if (parentResult != null) return parentResult;
-        }
-
-        return null;
-    }
-
-    /**
-     * Helper class for resolveColumnWithOrigins.
-     * Resolves a column index in a schema using a simple lookup strategy.
-     * First attempts to find the column with a fully qualified name (table.column),
-     * then falls back to an unqualified lookup.
-     * @param schemaId The schema ID to search in
-     * @param tableName The table name in the column reference
-     * @param columnName The column name to resolve
-     * @return The column index, or null if not found
-     */
-    private Integer smartResolveColumnIndex(String schemaId, String tableName, String columnName) {
-        DBCatalog catalog = DBCatalog.getInstance();
-        Map<String, Integer> schema = catalog.getSchema(schemaId);
-        if (schema == null) return null;
-
-        // Try qualified name first
-        String qualifiedKey = tableName + "." + columnName.toLowerCase();
-        Integer index = schema.get(qualifiedKey);
-
-        // If not found, try just the column name
-        if (index == null) {
-            index = schema.get(columnName.toLowerCase());
-        }
-
-        return index;
     }
 }

@@ -24,6 +24,8 @@ public class SelectOperatorTest {
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         // Create test database directory structure
@@ -42,6 +44,7 @@ public class SelectOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -55,9 +58,9 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithSimpleCondition() throws Exception {
         // Test with simple condition: Student.sid = 3
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.sid = 3");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Should return just one tuple with sid=3
         Tuple tuple = selectOp.getNextTuple();
@@ -73,9 +76,9 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithRangeCondition() throws Exception {
         // Test with range condition: Student.age < 30
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.age < 30");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Should return three tuples with age < 30 (students 2, 3, and 4)
         List<Value> expectedSids = TestTuples.ints(2, 3, 4);
@@ -97,9 +100,9 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithCompoundCondition() throws Exception {
         // Test with compound condition: Student.age < 30 AND Student.gpa >= 3
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.age < 30 AND Student.gpa >= 3");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Should return two tuples (students 2 and 4)
         List<Value> expectedSids = TestTuples.ints(2, 4);
@@ -121,9 +124,9 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithNoMatches() throws Exception {
         // Test with condition that matches no tuples: Student.sid > 10
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.sid > 10");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Should return no tuples
         assertNull(selectOp.getNextTuple(), "Should not return any tuples");
@@ -134,9 +137,9 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithColumnToColumnComparison() throws Exception {
         // Test with column-to-column comparison: Student.gpa = Student.sid
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.gpa = Student.sid");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Only student with sid=4 has matching gpa=3
         Tuple tuple = selectOp.getNextTuple();
@@ -153,10 +156,10 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithComplexNestedCondition() throws Exception {
         // Test with a complex nested condition (using only AND)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression(
                 "(Student.age > 20 AND Student.gpa >= 3) AND Student.sid < 5");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Should return students 1, 2, and 4
         List<Value> expectedSids = TestTuples.ints(1, 2, 4);
@@ -178,9 +181,9 @@ public class SelectOperatorTest {
     @Test
     public void testReset() throws Exception {
         // Test the reset functionality
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
         Expression expr = CCJSqlParserUtil.parseExpression("Student.gpa = 4");
-        SelectOperator selectOp = new SelectOperator(scanOp, expr);
+        SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
         // Get all matching tuples first time
         List<Value> firstRunSids = new ArrayList<>();
@@ -210,11 +213,11 @@ public class SelectOperatorTest {
     @Test
     public void testSelectWithLiteralComparisons() throws Exception {
         // Test with literal-to-literal comparisons (should always evaluate to same result)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // True condition: 5 < 10
         Expression trueExpr = CCJSqlParserUtil.parseExpression("5 < 10");
-        SelectOperator trueSelectOp = new SelectOperator(scanOp, trueExpr);
+        SelectOperator trueSelectOp = new SelectOperator(ctx, scanOp, trueExpr);
 
         // Should return all 5 tuples since condition is always true
         int count = 0;
@@ -228,7 +231,7 @@ public class SelectOperatorTest {
 
         // False condition: 10 < 5
         Expression falseExpr = CCJSqlParserUtil.parseExpression("10 < 5");
-        SelectOperator falseSelectOp = new SelectOperator(scanOp, falseExpr);
+        SelectOperator falseSelectOp = new SelectOperator(ctx, scanOp, falseExpr);
 
         // Should return no tuples since condition is always false
         assertNull(falseSelectOp.getNextTuple(), "Should not return any tuples for always-false condition");

@@ -32,16 +32,19 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
     private final Stack<Value> valueStack;
 
     private final String schemaId;
+    private final PlanContext ctx;
 
     /**
      * Constructs an ExpressionEvaluator with the specified schema identifier.
      * The schema identifier is used to resolve column references to their positions
      * in the tuple being evaluated.
+     * @param ctx The per-query context for schema resolution
      * @param schemaId The schema identifier for column resolution
      */
-    public ExpressionEvaluator(String schemaId) {
+    public ExpressionEvaluator(PlanContext ctx, String schemaId) {
         resultStack = new Stack<>();
         valueStack = new Stack<>();
+        this.ctx = ctx;
         this.schemaId = schemaId;
     }
     /**
@@ -180,14 +183,14 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         String tableName = column.getTable().getName();
         String columnName = column.getColumnName();
 
-        Integer colIdx = DBCatalog.getInstance().resolveColumnWithOrigins(schemaId, tableName, columnName);
+        Integer colIdx = ctx.resolveColumnWithOrigins(schemaId, tableName, columnName);
 //                " in schema " + schemaId + ", resolved to index: " + colIdx);
 //                ", tuple: " + currentTuple);
 
         if (colIdx == null) {
             // If not found, try looking for the column by its name only
             // Get all keys in the schema
-            Map<String, Integer> schema = QueryPlanOptimizer.getOperatorSchema(schemaId);
+            Map<String, Integer> schema = ctx.getSchema(schemaId);
             if (schema != null) {
                 // Try to find any key that ends with ".columnName"
                 String columnNameLower = columnName.toLowerCase();

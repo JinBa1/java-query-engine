@@ -1,6 +1,7 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.ExpressionEvaluator;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.Tuple;
 import net.sf.jsqlparser.expression.Expression;
 
@@ -24,7 +25,8 @@ public class SelectOperator extends Operator {
      * @param child The child Operator whose output are this operator's input.
      * @param expression The JsqlParser expression representing the select conditions.
      */
-    public SelectOperator(Operator child, Expression expression) {
+    public SelectOperator(PlanContext ctx, Operator child, Expression expression) {
+        super(ctx);
         this.child = child;
         this.expression = expression;
 
@@ -32,7 +34,7 @@ public class SelectOperator extends Operator {
 
         registerSchema();
 
-        this.evaluator = new ExpressionEvaluator(intermediateSchemaId);
+        this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
     }
 
     /**
@@ -121,6 +123,6 @@ public class SelectOperator extends Operator {
         super.updateSchema();
 
         // CRITICAL FIX: Recreate evaluator with updated schema ID
-        this.evaluator = new ExpressionEvaluator(intermediateSchemaId);
+        this.evaluator = new ExpressionEvaluator(ctx, intermediateSchemaId);
     }
 }

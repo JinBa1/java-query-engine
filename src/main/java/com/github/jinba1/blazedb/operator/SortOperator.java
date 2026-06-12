@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.Tuple;
 import com.github.jinba1.blazedb.TupleComparator;
 import net.sf.jsqlparser.schema.Column;
@@ -38,7 +39,8 @@ public class SortOperator extends Operator {
      * @param child The child operator from which to read tuples
      * @param sortColumns The columns to sort by, in order of precedence
      */
-    public SortOperator(Operator child, List<Column> sortColumns) {
+    public SortOperator(PlanContext ctx, Operator child, List<Column> sortColumns) {
+        super(ctx);
         this.sortColumns = sortColumns;
         this.child = child;
         this.tupleBuffer = new ArrayList<>();

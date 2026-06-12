@@ -33,77 +33,54 @@ public class PlanPrinterTest {
     private Operator plan(String sql) throws IOException {
         Path q = tempDb.resolve("q-" + System.nanoTime() + ".sql");
         Files.writeString(q, sql);
-        return QueryPlanner.parseStatement(q.toString());
+        // Deterministic unoptimized shape: optimization off, hash join on
+        return QueryPlanner.parseStatement(q.toString(), new QueryConfig(false, true));
     }
 
     @Test
     public void rendersLinearPipeline() throws IOException {
-        boolean original = Constants.useQueryOptimization;
-        Constants.useQueryOptimization = false; // deterministic unoptimized shape
-        try {
-            Operator root = plan(
-                    "SELECT Sales.region FROM Sales WHERE Sales.qty > 5 ORDER BY Sales.region LIMIT 1;");
-            String text = PlanPrinter.print(root);
-            assertEquals(
-                    "Limit[1]\n"
-                            + "  Sort[Sales.region]\n"
-                            + "    Project[Sales.region]\n"
-                            + "      Select[Sales.qty > 5]\n"
-                            + "        Scan[Sales]\n",
-                    text);
-        } finally {
-            Constants.useQueryOptimization = original;
-        }
+        Operator root = plan(
+                "SELECT Sales.region FROM Sales WHERE Sales.qty > 5 ORDER BY Sales.region LIMIT 1;");
+        String text = PlanPrinter.print(root);
+        assertEquals(
+                "Limit[1]\n"
+                        + "  Sort[Sales.region]\n"
+                        + "    Project[Sales.region]\n"
+                        + "      Select[Sales.qty > 5]\n"
+                        + "        Scan[Sales]\n",
+                text);
     }
 
     @Test
     public void rendersJoinWithTwoIndentedChildren() throws IOException {
-        boolean original = Constants.useQueryOptimization;
-        Constants.useQueryOptimization = false;
-        try {
-            Operator root = plan(
-                    "SELECT * FROM Sales, Reps WHERE Sales.region = Reps.region;");
-            String text = PlanPrinter.print(root);
-            assertEquals(
-                    "HashJoin[Sales.region = Reps.region]\n"
-                            + "  Scan[Sales]\n"
-                            + "  Scan[Reps]\n",
-                    text);
-        } finally {
-            Constants.useQueryOptimization = original;
-        }
+        Operator root = plan(
+                "SELECT * FROM Sales, Reps WHERE Sales.region = Reps.region;");
+        String text = PlanPrinter.print(root);
+        assertEquals(
+                "HashJoin[Sales.region = Reps.region]\n"
+                        + "  Scan[Sales]\n"
+                        + "  Scan[Reps]\n",
+                text);
     }
 
     @Test
     public void describesAggregateAndDistinct() throws IOException {
-        boolean original = Constants.useQueryOptimization;
-        Constants.useQueryOptimization = false;
-        try {
-            Operator agg = plan(
-                    "SELECT Sales.region, COUNT(*) FROM Sales GROUP BY Sales.region;");
-            String aggText = PlanPrinter.print(agg);
-            assertTrue(aggText.startsWith("Aggregate[group by: Sales.region; calls: COUNT(*)]\n"),
-                    aggText);
+        Operator agg = plan(
+                "SELECT Sales.region, COUNT(*) FROM Sales GROUP BY Sales.region;");
+        String aggText = PlanPrinter.print(agg);
+        assertTrue(aggText.startsWith("Aggregate[group by: Sales.region; calls: COUNT(*)]\n"),
+                aggText);
 
-            Operator distinct = plan("SELECT DISTINCT Sales.region FROM Sales;");
-            assertTrue(PlanPrinter.print(distinct).startsWith("Distinct\n"));
-        } finally {
-            Constants.useQueryOptimization = original;
-        }
+        Operator distinct = plan("SELECT DISTINCT Sales.region FROM Sales;");
+        assertTrue(PlanPrinter.print(distinct).startsWith("Distinct\n"));
     }
 
     @Test
     public void describesCrossJoinAndPlainAggregate() throws IOException {
-        boolean original = Constants.useQueryOptimization;
-        Constants.useQueryOptimization = false;
-        try {
-            Operator cross = plan("SELECT * FROM Sales, Reps;");
-            assertTrue(PlanPrinter.print(cross).startsWith("Join[cross]\n"));
+        Operator cross = plan("SELECT * FROM Sales, Reps;");
+        assertTrue(PlanPrinter.print(cross).startsWith("Join[cross]\n"));
 
-            Operator agg = plan("SELECT COUNT(*) FROM Sales;");
-            assertTrue(PlanPrinter.print(agg).startsWith("Aggregate[calls: COUNT(*)]\n"));
-        } finally {
-            Constants.useQueryOptimization = original;
-        }
+        Operator agg = plan("SELECT COUNT(*) FROM Sales;");
+        assertTrue(PlanPrinter.print(agg).startsWith("Aggregate[calls: COUNT(*)]\n"));
     }
 }

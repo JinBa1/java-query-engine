@@ -1,7 +1,7 @@
 package com.github.jinba1.blazedb.bench;
 
-import com.github.jinba1.blazedb.Constants;
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.QueryConfig;
 import com.github.jinba1.blazedb.QueryPlanner;
 import com.github.jinba1.blazedb.operator.Operator;
 import org.openjdk.jmh.annotations.*;
@@ -38,11 +38,9 @@ public class EndToEndJoinBenchmark {
 
     private Path dbDir;
     private Path queryFile;
-    private boolean originalFlag;
 
     @Setup(Level.Trial)
     public void generateData() throws IOException {
-        originalFlag = Constants.useHashJoin;
         dbDir = Files.createTempDirectory("jmh-e2e-db");
         Path data = dbDir.resolve("data");
         Files.createDirectories(data);
@@ -61,8 +59,7 @@ public class EndToEndJoinBenchmark {
     }
 
     @TearDown(Level.Trial)
-    public void restoreAndCleanup() throws IOException {
-        Constants.useHashJoin = originalFlag;
+    public void cleanup() throws IOException {
         try (var paths = Files.walk(dbDir)) {
             paths.sorted((x, y) -> y.compareTo(x)).forEach(p -> p.toFile().delete());
         }
@@ -70,10 +67,9 @@ public class EndToEndJoinBenchmark {
 
     @Benchmark
     public void planAndDrain(Blackhole bh) {
-        Constants.useHashJoin = useHashJoin;
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(dbDir.toString());
-        Operator root = QueryPlanner.parseStatement(queryFile.toString());
+        Operator root = QueryPlanner.parseStatement(queryFile.toString(), new QueryConfig(true, useHashJoin));
         var tuple = root.getNextTuple();
         while (tuple != null) {
             bh.consume(tuple);

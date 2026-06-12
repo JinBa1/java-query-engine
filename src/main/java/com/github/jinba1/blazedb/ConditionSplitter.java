@@ -23,6 +23,7 @@ import java.util.*;
  * - Join conditions: Apply to both sides and must be evaluated during the join
  */
 public class ConditionSplitter extends ExpressionVisitorAdapter {
+    private final PlanContext ctx;
     private final String outerSchemaId;
     private final String innerSchemaId;
 
@@ -32,10 +33,12 @@ public class ConditionSplitter extends ExpressionVisitorAdapter {
 
     /**
      * Constructs a ConditionSplitter with specified schema identifiers.
+     * @param ctx The per-query context for schema resolution
      * @param outerSchemaId The schema identifier for the outer (left) side of the join
      * @param innerSchemaId The schema identifier for the inner (right) side of the join
      */
-    public ConditionSplitter(String outerSchemaId, String innerSchemaId) {
+    public ConditionSplitter(PlanContext ctx, String outerSchemaId, String innerSchemaId) {
+        this.ctx = ctx;
         this.outerSchemaId = outerSchemaId;
         this.innerSchemaId = innerSchemaId;
     }
@@ -183,7 +186,7 @@ public class ConditionSplitter extends ExpressionVisitorAdapter {
     private boolean tableInSchema(String tableName, String schemaId) {
         // Use the DBCatalog to check if table is in schema
         if (schemaId.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
-            Map<String, Integer> schema = DBCatalog.getInstance().getIntermediateSchema(schemaId);
+            Map<String, Integer> schema = ctx.getIntermediateSchema(schemaId);
             if (schema == null) return false;
 
             // Check if any column key has this table prefix

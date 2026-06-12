@@ -33,6 +33,7 @@ public class ExpressionEvaluatorTest {
 
     private ExpressionEvaluator evaluator;
     private Tuple testTuple;
+    private PlanContext ctx;
 
     @BeforeEach
     public void setUp() throws IOException {
@@ -50,9 +51,10 @@ public class ExpressionEvaluatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
 
         // Create evaluator instance - using table name as schema ID for base tables
-        evaluator = new ExpressionEvaluator(TEST_TABLE);
+        evaluator = new ExpressionEvaluator(ctx, TEST_TABLE);
 
         // Create a test tuple for evaluations
         testTuple = new Tuple(TestTuples.ints(1, 10, 100, 1000));
@@ -216,12 +218,12 @@ public class ExpressionEvaluatorTest {
     @Test
     public void testSelectOperator() throws IOException {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Create a selection with TestTable.B > 15
             Expression expr = CCJSqlParserUtil.parseExpression("TestTable.B > 15");
-            SelectOperator selectOp = new SelectOperator(scanOp, expr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
             // Should return tuples with B > 15 (the 2nd and 3rd tuples)
             Tuple tuple1 = selectOp.getNextTuple();
@@ -251,12 +253,12 @@ public class ExpressionEvaluatorTest {
     @Test
     public void testSelectOperatorWithNoMatches() throws IOException {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Create a selection with a condition that matches no tuples
             Expression expr = CCJSqlParserUtil.parseExpression("TestTable.A > 100");
-            SelectOperator selectOp = new SelectOperator(scanOp, expr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
             // Should return no tuples
             Tuple tuple = selectOp.getNextTuple();
@@ -272,13 +274,13 @@ public class ExpressionEvaluatorTest {
     @Test
     public void testSelectOperatorWithComplexCondition() throws IOException {
         // Create a scan operator
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Create a selection with a complex condition
             Expression expr = CCJSqlParserUtil.parseExpression(
                     "TestTable.A < 3 AND TestTable.B >= 10 AND TestTable.C <= 200");
-            SelectOperator selectOp = new SelectOperator(scanOp, expr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, expr);
 
             // Should return tuples that match the complex condition (1st and 2nd tuples)
             Tuple tuple1 = selectOp.getNextTuple();
@@ -316,7 +318,7 @@ public class ExpressionEvaluatorTest {
         writeTable("People", "id,name", "1,alice", "2,bob");
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(tempDb.toString());
-        return new ExpressionEvaluator("People");
+        return new ExpressionEvaluator(ctx, "People");
     }
 
     @Test

@@ -27,6 +27,8 @@ public class SortOperatorTest {
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
     private static final String TEST_TABLE = "Student";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         // Create test database directory structure
@@ -45,6 +47,7 @@ public class SortOperatorTest {
         // Initialize the database catalog
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -58,7 +61,7 @@ public class SortOperatorTest {
     @Test
     public void testSortBySingleColumn() {
         // Test sorting by a single column (sid)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column object for sid
         List<Column> sortColumns = new ArrayList<>();
@@ -69,7 +72,7 @@ public class SortOperatorTest {
         sidColumn.setColumnName("sid");
         sortColumns.add(sidColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         // Get all tuples and verify they are in the expected order
         List<Value> expectedSids = TestTuples.ints(1, 2, 3, 4, 5);
@@ -92,7 +95,7 @@ public class SortOperatorTest {
     @Test
     public void testSortByMultipleColumns() {
         // Test sorting by multiple columns (gpa then age)
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Create Column objects for gpa and age
         List<Column> sortColumns = new ArrayList<>();
@@ -109,7 +112,7 @@ public class SortOperatorTest {
         ageColumn.setColumnName("age");
         sortColumns.add(ageColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         // Get all tuples
         List<Tuple> sortedTuples = new ArrayList<>();
@@ -168,12 +171,12 @@ public class SortOperatorTest {
     @Test
     public void testSortWithSelect() {
         // Test sorting after selecting a subset of tuples
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Select only students with gpa >= 3
             Expression selectExpr = CCJSqlParserUtil.parseExpression("Student.gpa >= 3");
-            SelectOperator selectOp = new SelectOperator(scanOp, selectExpr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, selectExpr);
 
             // Sort by sid
             List<Column> sortColumns = new ArrayList<>();
@@ -184,7 +187,7 @@ public class SortOperatorTest {
             sidColumn.setColumnName("sid");
             sortColumns.add(sidColumn);
 
-            SortOperator sortOp = new SortOperator(selectOp, sortColumns);
+            SortOperator sortOp = new SortOperator(ctx, selectOp, sortColumns);
 
             // Expected sids after filtering and sorting: 1, 2, 4, 5
             List<Value> expectedSids = TestTuples.ints(1, 2, 4, 5);
@@ -211,7 +214,7 @@ public class SortOperatorTest {
     @Test
     public void testReset() {
         // Test reset functionality
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Sort by sid
         List<Column> sortColumns = new ArrayList<>();
@@ -222,7 +225,7 @@ public class SortOperatorTest {
         sidColumn.setColumnName("sid");
         sortColumns.add(sidColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         // Read all tuples first time
         List<Tuple> firstRunTuples = new ArrayList<>();
@@ -259,12 +262,12 @@ public class SortOperatorTest {
     @Test
     public void testSortEmptyResult() {
         // Test sorting when the child operator returns no tuples
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         try {
             // Select students with an impossible condition
             Expression selectExpr = CCJSqlParserUtil.parseExpression("Student.sid > 100");
-            SelectOperator selectOp = new SelectOperator(scanOp, selectExpr);
+            SelectOperator selectOp = new SelectOperator(ctx, scanOp, selectExpr);
 
             // Sort by sid
             List<Column> sortColumns = new ArrayList<>();
@@ -275,7 +278,7 @@ public class SortOperatorTest {
             sidColumn.setColumnName("sid");
             sortColumns.add(sidColumn);
 
-            SortOperator sortOp = new SortOperator(selectOp, sortColumns);
+            SortOperator sortOp = new SortOperator(ctx, selectOp, sortColumns);
 
             // Should return no tuples
             assertNull(sortOp.getNextTuple(), "Sort operator with empty input should return null");
@@ -304,7 +307,7 @@ public class SortOperatorTest {
         }
 
         // Test that secondary sort key is used only when primary keys are equal
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Sort by gpa (primary) and age (secondary)
         List<Column> sortColumns = new ArrayList<>();
@@ -321,7 +324,7 @@ public class SortOperatorTest {
         ageColumn.setColumnName("age");
         sortColumns.add(ageColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         // Expected order by age: 4, 2, 1, 3, 5 (all have same gpa)
         List<Value> expectedSids = TestTuples.ints(4, 2, 1, 3, 5);
@@ -344,7 +347,7 @@ public class SortOperatorTest {
     @Test
     public void testPartialIteration() {
         // Test behavior when only retrieving some tuples
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Sort by sid
         List<Column> sortColumns = new ArrayList<>();
@@ -355,7 +358,7 @@ public class SortOperatorTest {
         sidColumn.setColumnName("sid");
         sortColumns.add(sidColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         // Get only first 3 tuples
         List<Value> partialSids = new ArrayList<>();
@@ -385,7 +388,7 @@ public class SortOperatorTest {
     @Test
     public void testSortDescendingOrderIssue() {
         // This test verifies that the operator sorts in ascending order
-        ScanOperator scanOp = new ScanOperator(TEST_TABLE);
+        ScanOperator scanOp = new ScanOperator(ctx, TEST_TABLE);
 
         // Sort by sid
         List<Column> sortColumns = new ArrayList<>();
@@ -396,7 +399,7 @@ public class SortOperatorTest {
         sidColumn.setColumnName("sid");
         sortColumns.add(sidColumn);
 
-        SortOperator sortOp = new SortOperator(scanOp, sortColumns);
+        SortOperator sortOp = new SortOperator(ctx, scanOp, sortColumns);
 
         List<Value> sortedSids = new ArrayList<>();
         Tuple tuple;

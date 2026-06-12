@@ -1,7 +1,7 @@
 package com.github.jinba1.blazedb.operator;
 
-import com.github.jinba1.blazedb.DBCatalog;
 import com.github.jinba1.blazedb.ExpressionEvaluator;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.SchemaTransformationType;
 import com.github.jinba1.blazedb.Tuple;
 import com.github.jinba1.blazedb.Value;
@@ -31,7 +31,8 @@ public class ProjectOperator extends Operator {
      * @param child The child operator to read from.
      * @param columns The list of columns to retain.
      */
-    public ProjectOperator(Operator child, List<Column> columns) {
+    public ProjectOperator(PlanContext ctx, Operator child, List<Column> columns) {
+        super(ctx);
         this.child = child;
         this.columns = columns;
 
@@ -96,7 +97,7 @@ public class ProjectOperator extends Operator {
     /**
      * Update the projection's schema transformation mapping
      * Help the optimiser to make decisions and other operators to locate the columns.
-     * @see DBCatalog for details on schema tracking.
+     * @see com.github.jinba1.blazedb.PlanContext for details on schema tracking.
      */
     @Override
     protected void registerSchema() {
@@ -124,8 +125,8 @@ public class ProjectOperator extends Operator {
             transformationDetails.put(key, sourceIndex.toString());
         }
 
-        // Register this schema with DBCatalog, including transformation details
-        intermediateSchemaId = DBCatalog.getInstance().registerSchemaWithTransformation(
+        // Register this schema with the context, including transformation details
+        intermediateSchemaId = ctx.registerSchemaWithTransformation(
                 projectedSchema,
                 child.propagateSchemaId(),
                 SchemaTransformationType.PROJECTION,

@@ -1,7 +1,7 @@
 package com.github.jinba1.blazedb.operator;
 
-import com.github.jinba1.blazedb.DBCatalog;
 import com.github.jinba1.blazedb.ExpressionEvaluator;
+import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Tuple;
 import com.github.jinba1.blazedb.Value;
@@ -52,8 +52,8 @@ public class HashJoinOperator extends JoinOperator {
      * @param expression The join condition; must contain at least one column-to-column
      *                   equality conjunct by the time execution starts
      */
-    public HashJoinOperator(Operator outerChild, Operator innerChild, Expression expression) {
-        super(outerChild, innerChild, expression);
+    public HashJoinOperator(PlanContext ctx, Operator outerChild, Operator innerChild, Expression expression) {
+        super(ctx, outerChild, innerChild, expression);
     }
 
     @Override
@@ -86,7 +86,7 @@ public class HashJoinOperator extends JoinOperator {
     /** Derives keys, builds the evaluator, and drains the inner child into the hash table. */
     private void prepare() {
         deriveKeys();
-        probeEvaluator = new ExpressionEvaluator(propagateSchemaId());
+        probeEvaluator = new ExpressionEvaluator(ctx, propagateSchemaId());
         buildTable = new HashMap<>();
         Tuple tuple;
         while ((tuple = getChild().getNextTuple()) != null) {
@@ -105,7 +105,6 @@ public class HashJoinOperator extends JoinOperator {
         innerKeyIndices = new ArrayList<>();
         String outerSchemaId = getOuterChild().propagateSchemaId();
         String innerSchemaId = getChild().propagateSchemaId();
-        DBCatalog catalog = DBCatalog.getInstance();
 
         for (Expression conjunct : flattenConjuncts(getJoinCondition())) {
             if (!(conjunct instanceof EqualsTo equalsTo)
@@ -113,15 +112,15 @@ public class HashJoinOperator extends JoinOperator {
                     || !(equalsTo.getRightExpression() instanceof Column right)) {
                 continue;
             }
-            Integer leftOuter = resolve(catalog, outerSchemaId, left);
-            Integer rightInner = resolve(catalog, innerSchemaId, right);
+            Integer leftOuter = resolve(ctx, outerSchemaId, left);
+            Integer rightInner = resolve(ctx, innerSchemaId, right);
             if (leftOuter != null && rightInner != null) {
                 outerKeyIndices.add(leftOuter);
                 innerKeyIndices.add(rightInner);
                 continue;
             }
-            Integer leftInner = resolve(catalog, innerSchemaId, left);
-            Integer rightOuter = resolve(catalog, outerSchemaId, right);
+            Integer leftInner = resolve(ctx, innerSchemaId, left);
+            Integer rightOuter = resolve(ctx, outerSchemaId, right);
             if (rightOuter != null && leftInner != null) {
                 outerKeyIndices.add(rightOuter);
                 innerKeyIndices.add(leftInner);
@@ -135,9 +134,9 @@ public class HashJoinOperator extends JoinOperator {
         }
     }
 
-    private static Integer resolve(DBCatalog catalog, String schemaId, Column column) {
+    private static Integer resolve(PlanContext ctx, String schemaId, Column column) {
         String table = column.getTable() != null ? column.getTable().getName() : null;
-        return catalog.resolveColumnWithOrigins(schemaId, table, column.getColumnName());
+        return ctx.resolveColumnWithOrigins(schemaId, table, column.getColumnName());
     }
 
     private static List<Value> extractKey(Tuple tuple, List<Integer> indices) {
