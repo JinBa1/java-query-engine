@@ -175,5 +175,9 @@ public class HashJoinOperatorTest {
         assertFalse(HashJoinOperator.hasEquiConjunct(cond("L.v > R.w")));
         assertFalse(HashJoinOperator.hasEquiConjunct(cond("L.k = 5"))); // column = literal
         assertFalse(HashJoinOperator.hasEquiConjunct(null)); // cross product
+        // same-side / unqualified equalities are not join keys: the planner must not
+        // select hash join for a condition deriveKeys() would reject at execution
+        assertFalse(HashJoinOperator.hasEquiConjunct(cond("L.k = L.v")));
+        assertFalse(HashJoinOperator.hasEquiConjunct(cond("k = w")));
     }
 }

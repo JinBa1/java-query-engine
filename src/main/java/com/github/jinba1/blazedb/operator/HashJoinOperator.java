@@ -184,16 +184,28 @@ public class HashJoinOperator extends JoinOperator {
         }
     }
 
-    /** True when the condition contains at least one column-to-column equality conjunct. */
+    /**
+     * True when the condition contains at least one column-to-column equality conjunct
+     * whose columns carry different table qualifiers. Same-side ({@code A.x = A.y}) and
+     * unqualified equalities are excluded so the planner never selects a hash join that
+     * {@link #deriveKeys()} would reject at execution time.
+     */
     public static boolean hasEquiConjunct(Expression expression) {
         for (Expression conjunct : flattenConjuncts(expression)) {
             if (conjunct instanceof EqualsTo equalsTo
-                    && equalsTo.getLeftExpression() instanceof Column
-                    && equalsTo.getRightExpression() instanceof Column) {
+                    && equalsTo.getLeftExpression() instanceof Column left
+                    && equalsTo.getRightExpression() instanceof Column right
+                    && tableName(left) != null
+                    && tableName(right) != null
+                    && !tableName(left).equalsIgnoreCase(tableName(right))) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static String tableName(Column column) {
+        return column.getTable() != null ? column.getTable().getName() : null;
     }
 
     /** Drops all derived/built state; next getNextTuple() re-derives and rebuilds. */
