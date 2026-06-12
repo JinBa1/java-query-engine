@@ -98,4 +98,23 @@ public class PlanContextTest {
         assertThrows(QueryExecutionException.class,
                 () -> ctx.getOrderedColumnNames("temp_doesnotexist"));
     }
+
+    @Test
+    public void orderedColumnNamesStripQualifierAndKeepAggregates() {
+        Map<String, Integer> schema = Map.of("student.a", 0, "SUM(student.b)", 1);
+        String id = ctx.registerSchemaWithTransformation(
+                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
+        assertEquals(List.of("a", "sum(student.b)"), ctx.getOrderedColumnNames(id));
+    }
+
+    @Test
+    public void orderedColumnNamesHandleAliasedJoinSchemas() {
+        Map<String, Integer> schema = new HashMap<>();
+        schema.put("student.a", 0); schema.put("a", 0);
+        schema.put("student.b", 1); schema.put("b", 1);
+        schema.put("enrolled.i", 2); schema.put("i", 2);
+        String id = ctx.registerSchemaWithTransformation(
+                schema, null, SchemaTransformationType.AGGREGATION, Map.of());
+        assertEquals(List.of("a", "b", "i"), ctx.getOrderedColumnNames(id));
+    }
 }
