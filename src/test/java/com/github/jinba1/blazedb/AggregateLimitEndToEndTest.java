@@ -66,6 +66,34 @@ public class AggregateLimitEndToEndTest {
     }
 
     @Test
+    public void unqualifiedAggregateArgumentIsRejectedAtPlanTime() throws IOException {
+        // The engine resolves columns by table qualifier throughout; unqualified
+        // arguments used to die later with an opaque NPE — must be a plan-time error
+        writeSales();
+        Path query = tempDb.resolve("unqualified.sql");
+        Files.writeString(query, "SELECT SUM(qty) FROM Sales;");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.parseStatement(query.toString()));
+        assertTrue(ex.getMessage().contains("qualified column names"), ex.getMessage());
+    }
+
+    @Test
+    public void multiArgumentAggregateIsRejectedAtPlanTime() throws IOException {
+        writeSales();
+        Path query = tempDb.resolve("multi.sql");
+        Files.writeString(query, "SELECT SUM(Sales.qty, Sales.region) FROM Sales;");
+        DBCatalog.resetDBCatalog();
+        DBCatalog.initDBCatalog(tempDb.toString());
+
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.parseStatement(query.toString()));
+        assertTrue(ex.getMessage().contains("exactly one argument"), ex.getMessage());
+    }
+
+    @Test
     public void countStarAndCountColumnAreEqual() throws IOException {
         writeSales();
         List<String> lines = run("SELECT COUNT(*), COUNT(Sales.qty) FROM Sales;");

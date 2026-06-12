@@ -419,7 +419,24 @@ public class QueryPlanner {
                 }
                 argument = null;
             } else {
+                if (function.getParameters().size() != 1) {
+                    throw new QueryExecutionException(
+                            function.getName() + " expects exactly one argument, got "
+                                    + function.getParameters().size() + ": '" + function + "'");
+                }
                 argument = (Expression) function.getParameters().get(0);
+                // The engine resolves columns by table qualifier throughout (projection,
+                // schema keys); an unqualified argument would fail later with an opaque
+                // NPE, so reject it here with a usable message instead
+                ColumnExtractor extractor = new ColumnExtractor();
+                argument.accept(extractor);
+                for (Column argColumn : extractor.getColumns()) {
+                    if (argColumn.getTable() == null || argColumn.getTable().getName() == null) {
+                        throw new QueryExecutionException(
+                                "Aggregate arguments must use qualified column names "
+                                        + "(table.column): '" + function + "'");
+                    }
+                }
             }
 
             String schemaKey;
