@@ -63,7 +63,7 @@ java-query-engine/
     │       ├── LimitOperator.java
     │       ├── Accumulator.java
     │       └── DuplicateEliminationOperator.java
-    └── test/java/com/github/jinba1/blazedb/   # 33 test files (336 tests)
+    └── test/java/com/github/jinba1/blazedb/   # 33 test files (339 tests)
         ├── BlazeDBTest.java
         ├── ColumnExtractorTest.java
         ├── ConditionSplitterTest.java
@@ -155,7 +155,7 @@ java-query-engine/
 ## COMMANDS
 
 ```bash
-# Run the full test suite (336 tests)
+# Run the full test suite (339 tests)
 ./mvnw test
 
 # Build the fat JAR explicitly
@@ -198,14 +198,14 @@ The project ships `.github/workflows/ci.yml` which triggers on push and pull_req
 
 Steps:
 1. **Build** — `./mvnw clean compile`
-2. **Test** — `./mvnw test` (336 tests; JMH benchmark classes compile here but are not executed)
+2. **Test** — `./mvnw test` (339 tests; JMH benchmark classes compile here but are not executed)
 3. **Coverage upload** — uploads JaCoCo coverage reports to Codecov via `codecov/codecov-action@v5` (token from `secrets.CODECOV_TOKEN`). JaCoCo plugin version 0.8.12 generates the coverage report.
 
 The README displays CI, Coverage (Codecov), and Dependencies badges at the top.
 
 ## NOTES
 
-- The test suite currently passes 336 tests with zero failures or errors: `Tests run: 336, Failures: 0, Errors: 0, Skipped: 0`.
+- The test suite currently passes 339 tests with zero failures or errors: `Tests run: 339, Failures: 0, Errors: 0, Skipped: 0`.
 - The benchmarking/tuple-counter infrastructure was introduced in commit `ef92ca1` ("feat: add query optimization benchmark suite with tuple counters"): `Operator` gained `protected long tupleCounter` with `getTupleCount()` / `resetTupleCount()`, and `QueryOptimizationBenchmarkTest` was added as one of the test files.
 - Budget enforcement reuses the tuple-counter slot: `countTuple()` (called per emitted tuple) increments `tupleCounter` and delegates to `QueryBudget.charge()` when a budget is attached. This means every operator in the tree counts — total-work semantics.
 - `SampleQueryRunner.java` provides an automated 20-query diff runner: it runs all queries in `samples/input/` against `samples/db/` and diffs each result against `samples/expected_output/`, reporting pass/fail. There is no need to diff manually.
