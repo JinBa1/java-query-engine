@@ -26,7 +26,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 
 **Operator hierarchy** (all extend `Operator`):
 
-`ScanOperator` → `SelectOperator` → `ProjectOperator` → `JoinOperator` → `SortOperator` → `AggregateOperator` → `DuplicateEliminationOperator` → `LimitOperator`
+`ScanOperator` → `SelectOperator` → `ProjectOperator` → `JoinOperator` / `HashJoinOperator` → `SortOperator` → `AggregateOperator` → `DuplicateEliminationOperator` → `LimitOperator`
 
 ## Feature Matrix
 
@@ -35,6 +35,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | `SELECT *` / projection | ✅ Supported |
 | `WHERE` predicates | ✅ Supported |
 | Inner joins (nested-loop) | ✅ Supported |
+| Hash join (auto-selected for equi-joins) | ✅ Supported |
 | `ORDER BY` | ✅ Supported |
 | `GROUP BY` + `SUM`, `COUNT`, `AVG`, `MIN`, `MAX` | ✅ Supported |
 | `LIMIT n` | ✅ Supported |
@@ -140,6 +141,50 @@ Aggregate[group by: Student.B; calls: SUM(Student.c)]
 
 No query execution occurs for EXPLAIN queries.
 
+## Join algorithms
+
+The engine supports two join algorithms; the planner selects between them automatically.
+
+### Nested-loop join
+
+`JoinOperator` implements a classic nested-loop join: for every outer tuple the inner child is rewound and scanned in full. It handles any join condition (equality, inequality, arbitrary expression, or cross product with no condition). `EXPLAIN` shows it as `Join[<condition>]`.
+
+### Hash join
+
+`HashJoinOperator` extends `JoinOperator` with an in-memory hash join. The inner (build) side is drained once into a `HashMap` keyed by the equality conjuncts; the outer (probe) side then streams through once. After a hash-table lookup, the full original condition is re-evaluated on every candidate, so residual non-equality conjuncts (e.g. `A.x = B.x AND A.y > 3`) work correctly. Output order — outer-major, inner order preserved within each key bucket — is identical to the nested-loop join. `EXPLAIN` shows it as `HashJoin[<condition>]`.
+
+**Auto-selection rule:** the planner chooses hash join when `Constants.useHashJoin` is `true` (the default) **and** the join condition contains at least one column-to-column equality conjunct (e.g. `Student.A = Enrolled.A`). Cross products (no condition) and pure non-equi joins (e.g. `A.x > B.y` only) always use nested-loop join.
+
+**Toggle:** set `Constants.useHashJoin = false` at program start (or in tests) to force nested-loop for all joins.
+
+### Benchmarks
+
+Performance was measured with a JMH 1.37 benchmark suite in the `bench/` package (`src/test/java/com/github/jinba1/blazedb/bench/`). The suite is compiled in CI but never run there; run it locally with:
+
+```bash
+./mvnw -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
+  "-Dexec.args=-cp %classpath org.openjdk.jmh.Main .*Benchmark"
+```
+
+**Results** (OpenJDK 21.0.5, Intel Core i9-13900HX, 32 logical cores, Linux under WSL2):
+
+| Benchmark | matchesPerKey | rowsPerSide | useHashJoin | Mode | Cnt | Score | Error | Units |
+|-----------|--------------|-------------|-------------|------|-----|-------|-------|-------|
+| EndToEndJoinBenchmark.planAndDrain | N/A | N/A | true | avgt | 3 | 1.028 | ± 0.288 | ms/op |
+| EndToEndJoinBenchmark.planAndDrain | N/A | N/A | false | avgt | 3 | 315.523 | ± 36.021 | ms/op |
+| JoinAlgorithmBenchmark.hashJoin | 1 | 1000 | N/A | avgt | 5 | 0.270 | ± 0.011 | ms/op |
+| JoinAlgorithmBenchmark.hashJoin | 1 | 5000 | N/A | avgt | 5 | 1.382 | ± 0.154 | ms/op |
+| JoinAlgorithmBenchmark.hashJoin | 10 | 1000 | N/A | avgt | 5 | 2.160 | ± 0.109 | ms/op |
+| JoinAlgorithmBenchmark.hashJoin | 10 | 5000 | N/A | avgt | 5 | 10.661 | ± 0.840 | ms/op |
+| JoinAlgorithmBenchmark.nestedLoopJoin | 1 | 1000 | N/A | avgt | 5 | 202.621 | ± 25.313 | ms/op |
+| JoinAlgorithmBenchmark.nestedLoopJoin | 1 | 5000 | N/A | avgt | 5 | 5027.912 | ± 370.564 | ms/op |
+| JoinAlgorithmBenchmark.nestedLoopJoin | 10 | 1000 | N/A | avgt | 5 | 194.786 | ± 4.916 | ms/op |
+| JoinAlgorithmBenchmark.nestedLoopJoin | 10 | 5000 | N/A | avgt | 5 | 4785.620 | ± 212.683 | ms/op |
+
+`EndToEndJoinBenchmark` joins two 1 000-row CSV tables through the full planner pipeline; nested-loop re-parses the inner CSV once per outer row, so the gap (≈ 307×) reflects both the algorithmic difference and I/O cost. `JoinAlgorithmBenchmark` uses in-memory `CachedOperator` inputs to isolate the join algorithm itself; at 5 000 rows/side the operator-level gap is ≈ 3 600×.
+
+Benchmarks are compiled in CI but never executed there.
+
 ## Demo
 
 **Input table** (`samples/db/data/Student.csv`):
@@ -204,19 +249,19 @@ done
 ./mvnw test
 ```
 
-The test suite covers individual operators, the query planner, the optimiser, expression evaluation, query budgets, EXPLAIN, and end-to-end integration scenarios (317 tests).
+The test suite covers individual operators, the query planner, the optimiser, expression evaluation, query budgets, EXPLAIN, hash join, and end-to-end integration scenarios (336 tests).
 
 ## Project Structure
 
 ```
 ├── src/main/java/com/github/jinba1/blazedb/   # Core engine (35 files)
-│   └── operator/                                # Volcano operators (10 files)
-├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests (317 tests across 29 files)
+│   └── operator/                                # Volcano operators (11 files, incl. HashJoinOperator)
+├── src/test/java/com/github/jinba1/blazedb/    # JUnit 5 tests (336 tests across 33 files)
 ├── samples/
 │   ├── db/data/                                 # CSV data files (header row + data rows)
 │   ├── input/query[1-20].sql                    # Sample queries
 │   └── expected_output/query[1-20].csv          # Expected results
-├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7, commons-csv 1.14.1)
+├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7, commons-csv 1.14.1, JMH 1.37 test-scope)
 ├── mvnw / mvnw.cmd                              # Maven Wrapper
 └── LICENSE
 ```
