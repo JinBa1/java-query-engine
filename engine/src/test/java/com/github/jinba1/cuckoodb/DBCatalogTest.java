@@ -247,4 +247,173 @@ class DBCatalogTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> DBCatalog.getInstance().getDBSchemata("T").put("c", 9));
     }
+
+    // ---- E4: single TableMeta map (getTableMeta) + runtime registration (registerTable) ----
+
+    @Test
+    public void getTableMetaExposesPathSchemaAndTypesTogether() {
+        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
+        TableMeta meta = DBCatalog.getInstance().getTableMeta("Student");
+        assertNotNull(meta, "loaded table must have meta");
+        assertTrue(meta.path().toString().endsWith("Student.csv"));
+        assertEquals(DBCatalog.getInstance().getDBSchemata("Student"), meta.schema());
+        assertEquals(DBCatalog.getInstance().getColumnTypes("Student"), meta.types());
+    }
+
+    @Test
+    public void getTableMetaReturnsNullForMissing() {
+        DBCatalog.initDBCatalog(SAMPLE_DB_DIR);
+        assertNull(DBCatalog.getInstance().getTableMeta("NoSuchTable"));
+    }
+
+    @Test
+    public void registerTableMakesTableQueryable() throws IOException {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+        Path csv = tempDb.resolve("upload.csv");
+        Files.writeString(csv, "id,name\n1,alice\n2,bob\n");
+
+        boolean registered = catalog.registerTable("Uploaded", csv);
+
+        assertTrue(registered, "first registration wins");
+        assertTrue(catalog.tableExists("Uploaded"));
+        assertEquals(Map.of("id", 0, "name", 1), catalog.getDBSchemata("Uploaded"));
+        assertEquals(List.of(ColumnType.INT, ColumnType.STRING), catalog.getColumnTypes("Uploaded"));
+        assertEquals(csv, catalog.getDBLocation("Uploaded"));
+    }
+
+    @Test
+    public void registerTableDuplicateReturnsFalseAndKeepsOriginal() throws IOException {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+        Path first = tempDb.resolve("first.csv");
+        Files.writeString(first, "id,name\n1,alice\n");
+        Path second = tempDb.resolve("second.csv");
+        Files.writeString(second, "x,y,z\n1,2,3\n");
+
+        assertTrue(catalog.registerTable("T", first));
+        boolean again = catalog.registerTable("T", second);
+
+        assertFalse(again, "duplicate registration must report not-registered (409 signal)");
+        assertEquals(first, catalog.getDBLocation("T"), "original meta must be untouched");
+        assertEquals(Map.of("id", 0, "name", 1), catalog.getDBSchemata("T"));
+    }
+
+    @Test
+    public void registerTableRejectsBadCsvWithDataError() throws IOException {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+        Path csv = tempDb.resolve("ragged.csv");
+        Files.writeString(csv, "a,b\n1,2,3\n");
+
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> catalog.registerTable("Bad", csv));
+        assertEquals(ErrorCode.DATA_ERROR, e.code());
+        assertFalse(catalog.tableExists("Bad"), "failed parse must not leave a partial table");
+    }
+
+    @Test
+    public void registeredTableSchemaIsImmutable() throws IOException {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+        Path csv = tempDb.resolve("u.csv");
+        Files.writeString(csv, "a,b\n1,2\n");
+        catalog.registerTable("U", csv);
+        assertThrows(UnsupportedOperationException.class,
+                () -> catalog.getDBSchemata("U").put("c", 9));
+    }
+
+    /**
+     * The D4 invariant under contention: while one thread registers a table, readers
+     * see it either fully absent or fully present — never a torn state (path without
+     * types, schema without path). A single putIfAbsent guarantees this.
+     */
+    @Test
+    public void registerTableIsAtomicAgainstConcurrentReaders() throws Exception {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+        Path csv = tempDb.resolve("race.csv");
+        Files.writeString(csv, "a,b\n1,2\n");
+
+        int readers = 12;
+        int iterationsPerReader = 5000;
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(readers + 1);
+        try {
+            var barrier = new java.util.concurrent.CyclicBarrier(readers + 1);
+            var torn = new java.util.concurrent.atomic.AtomicReference<String>();
+            var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < readers; i++) {
+                futures.add(pool.submit(() -> {
+                    barrier.await();
+                    for (int n = 0; n < iterationsPerReader; n++) {
+                        TableMeta meta = catalog.getTableMeta("Race");
+                        if (meta != null) {
+                            // Present => every field must be present and consistent.
+                            if (meta.path() == null || meta.schema() == null || meta.types() == null) {
+                                torn.compareAndSet(null, "TableMeta exposed with a null field");
+                            } else if (meta.schema().size() != meta.types().size()) {
+                                torn.compareAndSet(null, "schema/types width mismatch");
+                            }
+                        }
+                    }
+                    return null;
+                }));
+            }
+            // Writer thread registers mid-flight.
+            futures.add(pool.submit(() -> {
+                barrier.await();
+                catalog.registerTable("Race", csv);
+                return null;
+            }));
+            for (var f : futures) f.get();
+            assertNull(torn.get(), torn.get());
+            assertTrue(catalog.tableExists("Race"), "table is present after the race");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    /**
+     * The 409 contract PR 4b's upload path depends on: when N threads register the SAME name
+     * at once, exactly one putIfAbsent wins (returns true), the rest report false, and the
+     * winner's meta is installed intact — never a torn blend of two registrations.
+     */
+    @Test
+    public void registerTableHasExactlyOneWinnerAmongConcurrentSameNameRegisters() throws Exception {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+
+        int k = 16;
+        List<Path> csvs = new java.util.ArrayList<>();
+        for (int i = 0; i < k; i++) {
+            Path p = tempDb.resolve("w" + i + ".csv");
+            Files.writeString(p, "a,b\n" + i + "," + i + "\n");
+            csvs.add(p);
+        }
+
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(k);
+        try {
+            var barrier = new java.util.concurrent.CyclicBarrier(k);
+            var winners = new java.util.concurrent.atomic.AtomicInteger();
+            var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < k; i++) {
+                Path csv = csvs.get(i);
+                futures.add(pool.submit(() -> {
+                    barrier.await();
+                    if (catalog.registerTable("Solo", csv)) {
+                        winners.incrementAndGet();
+                    }
+                    return null;
+                }));
+            }
+            for (var f : futures) f.get();
+
+            assertEquals(1, winners.get(), "exactly one concurrent register may win");
+            assertTrue(catalog.tableExists("Solo"));
+            assertTrue(csvs.contains(catalog.getDBLocation("Solo")),
+                    "the installed meta is one registration's, intact (not a torn blend)");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 }

@@ -7,6 +7,7 @@ import com.github.jinba1.cuckoodb.IntValue;
 import com.github.jinba1.cuckoodb.PlanContext;
 import com.github.jinba1.cuckoodb.QueryExecutionException;
 import com.github.jinba1.cuckoodb.StringValue;
+import com.github.jinba1.cuckoodb.TableMeta;
 import com.github.jinba1.cuckoodb.Tuple;
 import com.github.jinba1.cuckoodb.Value;
 
@@ -43,11 +44,14 @@ public class ScanOperator extends Operator {
     public ScanOperator(PlanContext ctx, String tableName) {
         super(ctx);
         this.tableName = tableName;
-        tablePath = DBCatalog.getInstance().getDBLocation(tableName);
-        this.columnTypes = DBCatalog.getInstance().getColumnTypes(tableName);
-        if (tablePath == null || columnTypes == null) {
+        // One atomic lookup: path and types come from the same table registration,
+        // so a concurrent runtime upload can never expose one without the other.
+        TableMeta meta = DBCatalog.getInstance().getTableMeta(tableName);
+        if (meta == null) {
             throw DBCatalog.getInstance().unknownTable(tableName);
         }
+        this.tablePath = meta.path();
+        this.columnTypes = meta.types();
         child = null; // Scan cannot have child operator
 
         this.schemaRegistered = true;
