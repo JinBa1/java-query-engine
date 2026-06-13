@@ -5,11 +5,11 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.github.jinba1</groupId>
-  <artifactId>java-query-engine</artifactId>
+  <artifactId>cuckoodb</artifactId>
   <packaging>jar</packaging>
   <version>1.0.0</version>
 
-  <name>Java Query Engine</name>
+  <name>cuckooDB</name>
   <url>https://github.com/JinBa1/java-query-engine</url>
 
   <properties>
@@ -104,12 +104,12 @@
         <version>3.1.0</version>
         <executions>
           <execution>
-            <id>run-blazedb</id>
+            <id>run-cuckoodb</id>
             <goals>
               <goal>java</goal>
             </goals>
             <configuration>
-              <mainClass>com.github.jinba1.blazedb.BlazeDB</mainClass>
+              <mainClass>com.github.jinba1.cuckoodb.CuckooDB</mainClass>
             </configuration>
           </execution>
         </executions>
@@ -120,7 +120,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>com.github.jinba1.blazedb.BlazeDB</mainClass>
+              <mainClass>com.github.jinba1.cuckoodb.CuckooDB</mainClass>
             </manifest>
           </archive>
           <descriptorRefs>
