@@ -8,7 +8,7 @@ public record IntValue(int v) implements Value {
         if (other instanceof IntValue o) {
             return Integer.compare(v, o.v);
         }
-        throw new QueryExecutionException(
+        throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH,
                 "Type mismatch: cannot compare int value '" + v + "' with "
                         + other.typeName() + " value '" + other + "'");
     }

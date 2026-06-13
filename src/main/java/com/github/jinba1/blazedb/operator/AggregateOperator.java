@@ -124,7 +124,9 @@ public class AggregateOperator extends Operator {
                 if (groupKeyIndex != -1) {
                     resultAttributes.add(groupKeys.get(groupKeyIndex));
                 } else {
-                    throw new RuntimeException("Output column not found in group by columns");
+                    // planner validation guarantees output ⊆ group-by; reaching here is a bug
+                    throw new QueryExecutionException(ErrorCode.INTERNAL,
+                            "Output column at index " + outputIndex + " not found in GROUP BY columns");
                 }
             }
 
@@ -152,6 +154,7 @@ public class AggregateOperator extends Operator {
     private void processChildTuples() {
         Tuple tuple;
         while ((tuple = child.getNextTuple()) != null) {
+            checkBudgetDeadline(); // accumulation emits nothing; the timeout must still reach it
             List<Value> groupKey = new ArrayList<>();
             for (Integer index : groupByIndices) {
                 groupKey.add(tuple.getAttribute(index));
@@ -251,8 +254,7 @@ public class AggregateOperator extends Operator {
                 // Record source column
                 Integer sourceIndex = ctx.resolveColumnWithOrigins(childSchemaId, tableName, columnName);
                 if (sourceIndex == null) {
-                    throw new RuntimeException("Column " + tableName + "." + columnName +
-                            " not found in schema " + childSchemaId);
+                    throw ctx.unknownColumn(tableName, columnName, childSchemaId);
                 }
                 transformationDetails.put(key, "group_by:" + sourceIndex);
 

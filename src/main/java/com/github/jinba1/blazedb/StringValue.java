@@ -8,7 +8,7 @@ public record StringValue(String v) implements Value {
         if (other instanceof StringValue o) {
             return v.compareTo(o.v);
         }
-        throw new QueryExecutionException(
+        throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH,
                 "Type mismatch: cannot compare string value '" + v + "' with "
                         + other.typeName() + " value '" + other + "'");
     }

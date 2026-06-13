@@ -62,4 +62,50 @@ public class QueryBudgetTest {
     public void exceptionIsAQueryExecutionException() {
         assertTrue(QueryExecutionException.class.isAssignableFrom(QueryBudgetExceededException.class));
     }
+
+    @Test
+    public void checkDeadlineWithZeroTimeoutTripsImmediately() {
+        QueryBudget budget = new QueryBudget(null, 0L);
+        QueryBudgetExceededException ex =
+                assertThrows(QueryBudgetExceededException.class, budget::checkDeadline);
+        assertTrue(ex.getMessage().contains("Time budget exceeded"), ex.getMessage());
+    }
+
+    @Test
+    public void checkDeadlineStartsTheClockWhenFirst() throws InterruptedException {
+        // a stall before the first charge must still be covered: the check starts the clock
+        QueryBudget budget = new QueryBudget(null, 30L);
+        Thread.sleep(50); // before the first check; must not count
+        budget.checkDeadline(); // clock starts here, deadline 30 ms away: no throw
+        Thread.sleep(50);
+        assertThrows(QueryBudgetExceededException.class, budget::checkDeadline);
+    }
+
+    @Test
+    public void checkDeadlineDoesNotCountTuples() {
+        QueryBudget budget = new QueryBudget(2L, null);
+        for (int i = 0; i < 100; i++) {
+            budget.checkDeadline(); // tuple limit must be untouched
+        }
+        budget.charge();
+        budget.charge(); // exactly at limit: fine
+        assertEquals(2, budget.processed());
+    }
+
+    @Test
+    public void checkDeadlineWithNullTimeoutIsANoOp() {
+        QueryBudget budget = new QueryBudget(null, null);
+        for (int i = 0; i < 100; i++) {
+            budget.checkDeadline();
+        }
+        assertEquals(0, budget.processed());
+    }
+
+    @Test
+    public void checkDeadlineSeesClockStartedByCharge() throws InterruptedException {
+        QueryBudget budget = new QueryBudget(null, 5L);
+        budget.charge(); // starts the clock
+        Thread.sleep(50);
+        assertThrows(QueryBudgetExceededException.class, budget::checkDeadline);
+    }
 }

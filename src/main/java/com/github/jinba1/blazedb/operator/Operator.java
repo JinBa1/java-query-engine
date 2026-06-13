@@ -82,7 +82,20 @@ public abstract class Operator {
     }
 
     /**
-     * Attaches a query budget to this operator and its entire subtree.
+     * Checks the time budget without counting a tuple. Blocking operators call this
+     * once per iteration of their build/drain loops, where {@link #countTuple()} is
+     * unreachable until the phase completes.
+     */
+    protected final void checkBudgetDeadline() {
+        if (budget != null) {
+            budget.checkDeadline();
+        }
+    }
+
+    /**
+     * Attaches a query budget to this operator and its entire subtree. May be called
+     * at any point — operators consult the budget on each tuple/check, so attaching
+     * mid-execution simply starts enforcement from that point on.
      * @param budget The budget shared by all operators of one query
      */
     public void attachBudget(QueryBudget budget) {
@@ -177,7 +190,7 @@ public abstract class Operator {
      * @param schemaId The schema identifier to resolve against
      * @param targetList Optional existing list to populate with resolved indices (will be cleared if not null)
      * @return A list of resolved column indices, either the provided targetList or a new ArrayList
-     * @throws RuntimeException If any column cannot be resolved in the specified schema
+     * @throws QueryExecutionException If any column cannot be resolved in the specified schema
      */
     protected List<Integer> resolveColumnIndices(List<Column> columns, String schemaId,
                                                  List<Integer> targetList) {
@@ -192,8 +205,7 @@ public abstract class Operator {
 
             Integer index = ctx.resolveColumnWithOrigins(schemaId, tableName, columnName);
             if (index == null) {
-                throw new RuntimeException("Column " + tableName + "." + columnName +
-                        " not found in schema " + schemaId);
+                throw ctx.unknownColumn(tableName, columnName, schemaId);
             }
 
             indices.add(index);

@@ -7,6 +7,7 @@ import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
+import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
@@ -15,6 +16,7 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 
 import java.io.FileReader;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -38,7 +40,8 @@ public class QueryPlanner {
      * Parses an SQL statement from a file and constructs a query plan.
      * Kept for existing callers; EXPLAIN-aware callers should use {@link #planQuery}.
      * @param filename The path to a file containing a valid SQL query
-     * @return The root operator of the constructed query plan, or null if parsing fails
+     * @return The root operator of the constructed query plan
+     * @throws QueryExecutionException if the file is unreadable or the query cannot be planned
      */
     public static Operator parseStatement(String filename) {
         return planQuery(filename).root();
@@ -48,7 +51,8 @@ public class QueryPlanner {
      * Parses an SQL statement with explicit configuration and constructs a query plan.
      * @param filename The path to a file containing a valid SQL query
      * @param config The per-query planner configuration
-     * @return The root operator of the constructed query plan, or null if parsing fails
+     * @return The root operator of the constructed query plan
+     * @throws QueryExecutionException if the file is unreadable or the query cannot be planned
      */
     public static Operator parseStatement(String filename, QueryConfig config) {
         return planQuery(filename, config).root();
@@ -57,7 +61,8 @@ public class QueryPlanner {
     /**
      * Plans one query file under the production default configuration.
      * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
-     * @return The planned query; root is null if parsing fails
+     * @return The planned query; the root is never null
+     * @throws QueryExecutionException if the file is unreadable or the query cannot be planned
      */
     public static PlannedQuery planQuery(String filename) {
         return planQuery(filename, QueryConfig.defaults());
@@ -69,50 +74,69 @@ public class QueryPlanner {
      * the optimized, executable tree either way.
      * @param filename The path to a file containing a valid SQL query (optionally EXPLAIN-prefixed)
      * @param config The per-query planner configuration
-     * @return The planned query; root is null if parsing fails
+     * @return The planned query; the root is never null
+     * @throws QueryExecutionException if the file is unreadable or the query cannot be planned,
+     *         with an {@link ErrorCode} and a message the caller can act on
      */
     public static PlannedQuery planQuery(String filename, QueryConfig config) {
         PlanContext ctx = new PlanContext(config);
-        Operator rootOp = null;
-        boolean explain = false;
+
+        Statement statement;
         try {
-            Statement statement = CCJSqlParserUtil.parse(new FileReader(filename));
-
-            Select select = null;
-            if (statement instanceof ExplainStatement explainStatement) {
-                explain = true;
-                select = explainStatement.getStatement();
-            } else if (statement != null) {
-                select = (Select) statement;
-            }
-
-            if (select != null) {
-                rootOp = buildOperatorTree(ctx, select);
-            }
-        } catch (QueryExecutionException e) {
-            throw e;
-        } catch (Exception e) {
-            System.err.println("Exception occurred during parsing");
-            e.printStackTrace();
+            statement = CCJSqlParserUtil.parse(new FileReader(filename));
+        } catch (JSQLParserException e) {
+            throw new QueryExecutionException(ErrorCode.PARSE_ERROR,
+                    "SQL syntax error: " + parserMessage(e));
+        } catch (IOException e) {
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Could not read query file '" + filename + "': " + e.getMessage());
         }
+
+        boolean explain = false;
+        Select select;
+        if (statement instanceof ExplainStatement explainStatement) {
+            explain = true;
+            select = explainStatement.getStatement();
+        } else if (statement instanceof Select s) {
+            select = s;
+        } else {
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                    "Only SELECT queries are supported; got "
+                            + (statement == null ? "an empty statement"
+                                    : statement.getClass().getSimpleName().toUpperCase()));
+        }
+
+        Operator rootOp = buildOperatorTree(ctx, select);
 
         // Ensure schemas are properly registered
         ensureAllSchemasRegistered(rootOp);
 
-        String beforeText = (explain && rootOp != null) ? PlanPrinter.print(rootOp) : null;
+        String beforeText = explain ? PlanPrinter.print(rootOp) : null;
 
-        // Apply query optimization if enabled (skip when planning failed: root is null)
-        if (config.useQueryOptimization() && rootOp != null) {
+        // Apply query optimization if enabled
+        if (config.useQueryOptimization()) {
             rootOp = QueryPlanOptimizer.optimize(ctx, rootOp);
         }
 
         String explainText = null;
-        if (explain && rootOp != null) {
+        if (explain) {
             explainText = "=== Plan (as written) ===\n" + beforeText
                     + "\n=== Plan (optimized) ===\n" + PlanPrinter.print(rootOp);
         }
 
         return new PlannedQuery(rootOp, explainText);
+    }
+
+    /**
+     * Trims a JSqlParser failure to its useful head: the unexpected token and position.
+     * The full message appends every token the grammar would accept — hundreds of lines
+     * of noise for an agent that just needs to see what was wrong.
+     */
+    private static String parserMessage(JSQLParserException e) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
+        String message = cause.getMessage() != null ? cause.getMessage() : "unparseable SQL";
+        int cut = message.indexOf("\nWas expecting");
+        return (cut > 0 ? message.substring(0, cut) : message).strip();
     }
 
     /**
@@ -158,7 +182,7 @@ public class QueryPlanner {
      * @return The root operator of the join tree
      */
     private static Operator processJoins(PlanContext ctx, Operator rootOp, Select select) {
-        ExpressionPreprocessor preprocessor = new ExpressionPreprocessor();
+        ExpressionPreprocessor preprocessor = new ExpressionPreprocessor(ctx);
 
         Expression whereExpression = select.getPlainSelect().getWhere();
 
@@ -286,14 +310,15 @@ public class QueryPlanner {
             return rootOp;
         }
         if (limit.getOffset() != null) {
-            throw new QueryExecutionException("OFFSET is not supported; use plain LIMIT n");
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                    "OFFSET is not supported; use plain LIMIT n");
         }
         if (limit.isLimitAll() || limit.isLimitNull()) {
-            throw new QueryExecutionException(
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                     "LIMIT ALL / LIMIT NULL are not supported; use LIMIT n with n >= 0");
         }
         if (!(limit.getRowCount() instanceof LongValue rowCount) || rowCount.getValue() < 0) {
-            throw new QueryExecutionException(
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                     "LIMIT requires a non-negative integer literal; got '"
                             + limit.getRowCount() + "'");
         }
@@ -356,23 +381,23 @@ public class QueryPlanner {
                 continue; // aggregate call — validated by extractAggregateCalls
             }
             if (expr instanceof AllColumns) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                         "SELECT * cannot be combined with aggregates or GROUP BY; "
                                 + "list the columns explicitly");
             }
             if (expr instanceof Column column) {
                 if (!hasGroupBy) {
-                    throw new QueryExecutionException(
+                    throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                             "Non-aggregate column '" + column
                                     + "' in SELECT with aggregates requires GROUP BY");
                 }
                 if (!groupByKeys.contains(columnKey(column))) {
-                    throw new QueryExecutionException(
+                    throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                             "Column '" + column + "' in SELECT must appear in GROUP BY");
                 }
                 continue;
             }
-            throw new QueryExecutionException(
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                     "Unsupported SELECT item '" + expr + "' with aggregates or GROUP BY; "
                             + "only aggregate functions and grouped columns are allowed");
         }
@@ -399,9 +424,9 @@ public class QueryPlanner {
             if (expr instanceof Column) {
                 Column column = (Column) expr;
                 groupByColumns.add(column);
-//                        column.getTable().getName() + "." + column.getColumnName());
             } else {
-                throw new UnsupportedOperationException("Only column references are supported in GROUP BY");
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                        "GROUP BY supports only column references; got '" + expr + "'");
             }
         }
 
@@ -436,13 +461,13 @@ public class QueryPlanner {
                             && function.getParameters().get(0) instanceof AllColumns);
             if (isStar) {
                 if (aggregateFunction != AggregateFunction.COUNT) {
-                    throw new QueryExecutionException(
+                    throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                             function.getName() + "(*) is not supported; only COUNT(*) may use '*'");
                 }
                 argument = null;
             } else {
                 if (function.getParameters().size() != 1) {
-                    throw new QueryExecutionException(
+                    throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                             function.getName() + " expects exactly one argument, got "
                                     + function.getParameters().size() + ": '" + function + "'");
                 }
@@ -454,7 +479,7 @@ public class QueryPlanner {
                 argument.accept(extractor);
                 for (Column argColumn : extractor.getColumns()) {
                     if (argColumn.getTable() == null || argColumn.getTable().getName() == null) {
-                        throw new QueryExecutionException(
+                        throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                                 "Aggregate arguments must use qualified column names "
                                         + "(table.column): '" + function + "'");
                     }
@@ -565,7 +590,8 @@ public class QueryPlanner {
                 Column column = (Column) exp;
                 sortCols.add(column);
             } else {
-                throw new RuntimeException("Unexpected item: " + orderByElement + " of type " + orderByElements.getClass());
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                        "ORDER BY supports only column references; got '" + orderByElement + "'");
             }
         }
         return sortCols;
@@ -586,7 +612,8 @@ public class QueryPlanner {
                 Column column = (Column) exp;
                 projectCols.add(column);
             } else {
-                throw new RuntimeException("Unexpected item: " + item + " of type " + item.getClass());
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                        "SELECT supports only column references or aggregate calls; got '" + exp + "'");
             }
         }
         return projectCols;
@@ -631,7 +658,9 @@ public class QueryPlanner {
         List<Table> tables = new ArrayList<>();
         for (Join join : select.getPlainSelect().getJoins()) {
             if (!(join.getRightItem() instanceof Table)) {
-                throw new UnsupportedOperationException("All joined items must be tables");
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                        "Unsupported FROM item '" + join.getRightItem()
+                                + "'; only plain tables can be joined");
             }
             Table joinTable = (Table) join.getRightItem();
             tables.add(joinTable);

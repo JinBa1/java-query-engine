@@ -1,6 +1,8 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.PlanContext;
+import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Tuple;
 
 import java.util.HashMap;
@@ -11,11 +13,17 @@ import java.util.Map;
  * It emits at most {@code limit} tuples from its child, then reports EOF.
  * The planner places it at the top of the plan, above DISTINCT and ORDER BY,
  * so it caps the final result.
+ *
+ * <p>When the cap is hit, the operator peeks the child once more so
+ * {@link #wasTruncated()} can tell a truncated result from one with exactly
+ * {@code limit} rows — agent callers decide whether to refine based on it.
  */
 public class LimitOperator extends Operator {
 
     private final long limit;
     private long emitted = 0;
+    private boolean peeked = false;
+    private boolean truncated = false;
 
     /**
      * Constructs a LimitOperator capping the child's output.
@@ -33,6 +41,7 @@ public class LimitOperator extends Operator {
     @Override
     public Tuple getNextTuple() {
         if (emitted >= limit) {
+            peekForMore();
             return null;
         }
         Tuple tuple = child.getNextTuple();
@@ -43,10 +52,39 @@ public class LimitOperator extends Operator {
         return tuple;
     }
 
+    /** Pulls the child once past the cap; a row there means the result was truncated. */
+    private void peekForMore() {
+        if (peeked) {
+            return;
+        }
+        peeked = true;
+        try {
+            truncated = child.getNextTuple() != null;
+        } catch (QueryExecutionException e) {
+            if (e.code() == ErrorCode.INTERNAL) {
+                throw e; // engine bug — never mask it as truncation metadata
+            }
+            // The capped result is already complete; rows past the cap are not part
+            // of the answer, so neither budget exhaustion nor a bad row there may
+            // fail the query. Either reads honestly as "result may be incomplete".
+            truncated = true;
+        }
+    }
+
+    /**
+     * Whether the child had more rows than the cap. Only meaningful after the drain
+     * completed (this operator returned null); false before that.
+     */
+    public boolean wasTruncated() {
+        return truncated;
+    }
+
     @Override
     public void reset() {
         child.reset();
         emitted = 0;
+        peeked = false;
+        truncated = false;
     }
 
     @Override

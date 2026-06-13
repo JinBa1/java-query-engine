@@ -83,7 +83,8 @@ public class DBCatalog {
     private void loadDBCatalog(String dBDirectory) {
         Path dataPath = Paths.get(dBDirectory).resolve(Constants.DATA_DIRECTORY_NAME);
         if (!Files.isDirectory(dataPath)) {
-            throw new QueryExecutionException("Data directory not found: " + dataPath);
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Data directory not found: " + dataPath);
         }
         try (Stream<Path> files = Files.list(dataPath)) {
             List<Path> csvs = files
@@ -96,7 +97,8 @@ public class DBCatalog {
                 loadTable(tableName, csv);
             }
         } catch (IOException e) {
-            throw new QueryExecutionException("Error scanning data directory " + dataPath + ": " + e.getMessage());
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Error scanning data directory " + dataPath + ": " + e.getMessage());
         }
     }
 
@@ -107,7 +109,7 @@ public class DBCatalog {
         try (CSVParser parser = CSVParser.parse(csv, StandardCharsets.UTF_8, format)) {
             Iterator<CSVRecord> it = parser.iterator();
             if (!it.hasNext()) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.DATA_ERROR,
                         "Table '" + tableName + "' has no header row (" + csv + ")");
             }
             CSVRecord header = it.next();
@@ -116,7 +118,7 @@ public class DBCatalog {
             for (int i = 0; i < width; i++) {
                 String col = header.get(i).trim().toLowerCase();
                 if (columnMap.putIfAbsent(col, i) != null) {
-                    throw new QueryExecutionException(
+                    throw new QueryExecutionException(ErrorCode.DATA_ERROR,
                             "Table '" + tableName + "' has duplicate column '" + col + "' in header");
                 }
             }
@@ -128,7 +130,8 @@ public class DBCatalog {
                 CSVRecord record = it.next();
                 rowNum++;
                 if (record.size() != width) {
-                    throw new QueryExecutionException("Table '" + tableName + "' row " + rowNum
+                    throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                            "Table '" + tableName + "' row " + rowNum
                             + ": expected " + width + " fields, found " + record.size());
                 }
                 for (int i = 0; i < width; i++) {
@@ -185,6 +188,30 @@ public class DBCatalog {
      */
     public List<ColumnType> getColumnTypes(String tableName) {
         return dbColumnTypes.get(tableName);
+    }
+
+    /**
+     * Returns all table names in the catalog, sorted — for agent-legible
+     * "Available tables: ..." error messages.
+     * @return The sorted list of loaded table names
+     */
+    public List<String> getTableNames() {
+        List<String> names = new ArrayList<>(dbLocations.keySet());
+        Collections.sort(names);
+        return names;
+    }
+
+    /**
+     * Builds the standard unknown-table failure, listing what is available so an
+     * agent caller can self-correct. One construction site keeps the wording from
+     * drifting between the FROM-clause and WHERE-clause detection paths.
+     * @param tableName The table name that failed to resolve
+     * @return The exception to throw; never null
+     */
+    public QueryExecutionException unknownTable(String tableName) {
+        return new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
+                "Table '" + tableName + "' not found. Available tables: "
+                + String.join(", ", getTableNames()) + ".");
     }
 
     /**

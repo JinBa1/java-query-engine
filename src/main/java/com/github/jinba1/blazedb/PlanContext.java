@@ -118,6 +118,43 @@ public class PlanContext {
     }
 
     /**
+     * Comma-separated resolvable column names of a schema, in column order — for
+     * agent-legible error messages. Alias keys mapping to the same index are all
+     * listed, because each is a name the caller may legally write.
+     */
+    public String availableColumns(String schemaId) {
+        return formatColumns(getSchema(schemaId));
+    }
+
+    /**
+     * Builds the standard unknown-column failure for a schema lookup miss, listing
+     * what is available so an agent caller can self-correct. One construction site
+     * keeps the wording aligned across projection, sort, aggregate, and evaluation.
+     * @param tableName  The table qualifier as written in the query
+     * @param columnName The column name that failed to resolve
+     * @param schemaId   The schema the lookup ran against
+     * @return The exception to throw; never null
+     */
+    public QueryExecutionException unknownColumn(String tableName, String columnName,
+                                                 String schemaId) {
+        return new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
+                "Column '" + tableName + "." + columnName + "' not found. Available: "
+                + availableColumns(schemaId) + ".");
+    }
+
+    /** Formats a schema map as a comma-separated column list, ordered by index then name. */
+    public static String formatColumns(Map<String, Integer> schema) {
+        if (schema == null || schema.isEmpty()) {
+            return "(none)";
+        }
+        return schema.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    /**
      * Result-header names for a schema, in column order. Ported verbatim from
      * DBCatalog.getOrderedColumnNames: bare-ifies plain columns, keeps aggregate
      * keys whole, width = max index + 1, sorted-key determinism.

@@ -50,6 +50,28 @@ public class QueryBudget {
         }
     }
 
+    /**
+     * Checks only the time limit, without counting a tuple. Blocking operators call this
+     * inside their build/drain loops, where {@link #charge()} is unreachable until the
+     * phase completes — otherwise a query stuck in a long build that emits nothing would
+     * escape the timeout. Starts the clock if nothing has yet, so a stall before the
+     * first emission is covered too.
+     * @throws QueryBudgetExceededException when the time limit is exceeded
+     */
+    public void checkDeadline() {
+        if (timeoutMs == null) {
+            return;
+        }
+        if (!started) {
+            started = true;
+            deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000;
+        }
+        if (System.nanoTime() >= deadlineNanos) {
+            throw new QueryBudgetExceededException(
+                    "Time budget exceeded: limit " + timeoutMs + " ms");
+        }
+    }
+
     /** Total tuples charged so far. */
     public long processed() {
         return processed;

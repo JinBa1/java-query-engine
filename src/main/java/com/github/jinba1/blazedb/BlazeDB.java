@@ -9,6 +9,7 @@ import java.util.List;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
+import com.github.jinba1.blazedb.operator.LimitOperator;
 import com.github.jinba1.blazedb.operator.Operator;
 
 /**
@@ -76,10 +77,6 @@ public class BlazeDB {
 			}
 
 			Operator rootOp = planned.root();
-			if (rootOp == null) {
-				System.err.println("Error: query could not be planned");
-				return 1;
-			}
 			if (maxTuples != null || timeoutMs != null) {
 				rootOp.attachBudget(new QueryBudget(maxTuples, timeoutMs));
 			}
@@ -90,6 +87,12 @@ public class BlazeDB {
 			return 1;
 		} catch (IOException e) {
 			System.err.println("Error: failed to write output: " + e.getMessage());
+			return 1;
+		} catch (RuntimeException e) {
+			// Engine bug, not a user error — fail with an exit code instead of an
+			// uncaught-exception crash; the trace stays on stderr for bug reports
+			System.err.println("Internal error: " + e);
+			e.printStackTrace();
 			return 1;
 		}
 	}
@@ -104,8 +107,9 @@ public class BlazeDB {
 	 * on the root object of the operator tree. Writes the result to `outputFile`.
 	 * @param root       The root operator of the operator tree (assumed to be non-null).
 	 * @param outputFile The name of the file where the result will be written.
+	 * @return Execution metadata: rows written, LIMIT truncation, refine hint.
 	 */
-	public static void execute(Operator root, String outputFile) {
+	public static QueryResult execute(Operator root, String outputFile) {
 		File outputFileObj = new File(outputFile);
 		File parentDir = outputFileObj.getParentFile();
 		if (parentDir != null && !parentDir.exists()) {
@@ -117,6 +121,7 @@ public class BlazeDB {
 
 		List<String> headers = root.getContext().getOrderedColumnNames(root.propagateSchemaId());
 		CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
+		long rows = 0;
 		try {
 			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
 				printer.printRecord(headers);
@@ -127,21 +132,30 @@ public class BlazeDB {
 						fields.add(v.toString());
 					}
 					printer.printRecord(fields);
+					rows++;
 				}
 			}
-		} catch (QueryExecutionException e) {
+		} catch (RuntimeException e) {
+			// QueryExecutionException and internal errors alike: never leave a
+			// truncated file that looks like a complete result
 			deletePartialOutput(outputFileObj, outputFile);
 			throw e;
 		} catch (IOException e) {
 			// Disk full, permissions, output path is a directory, ... — swallowing this
 			// would make a broken or missing file look like success to callers
 			deletePartialOutput(outputFileObj, outputFile);
-			throw new QueryExecutionException(
+			throw new QueryExecutionException(ErrorCode.DATA_ERROR,
 					"Failed to write output file '" + outputFile + "': " + e.getMessage());
 		}
 
+		// The planner places Limit topmost, so the root knows whether the cap cut the result
+		boolean truncated = root instanceof LimitOperator limitOp && limitOp.wasTruncated();
+		QueryResult result = truncated ? QueryResult.truncated(rows) : QueryResult.complete(rows);
+
 		System.out.println("Query executed successfully!");
 		System.out.println("Output file: " + outputFile);
+		System.out.println("Rows: " + rows + (truncated ? " (truncated; more rows exist)" : ""));
+		return result;
 	}
 
 	/** Never leave a truncated file that looks like a complete result. */

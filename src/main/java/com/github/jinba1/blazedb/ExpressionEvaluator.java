@@ -68,8 +68,6 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
             throw new RuntimeException("Expression evaluation did not produce a result");
         }
 
-        boolean result = resultStack.peek();
-
         return resultStack.pop();
     }
 
@@ -205,8 +203,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         }
 
         if (colIdx == null) {
-            throw new RuntimeException("Column '" + tableName + "." + columnName +
-                    " not found in schema " + schemaId);
+            throw ctx.unknownColumn(tableName, columnName, schemaId);
         }
 
         valueStack.push(currentTuple.getAttribute(colIdx));
@@ -239,6 +236,18 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
      */
     @Override
     public void visitBinaryExpression(BinaryExpression expression) {
+        // Reject before evaluating children: an unsupported operator (e.g. OR) has
+        // boolean operands that push nothing onto the value stack, so popping below
+        // would fail with an opaque EmptyStackException instead of this message
+        if (!(expression instanceof Multiplication
+                || expression instanceof EqualsTo || expression instanceof NotEqualsTo
+                || expression instanceof GreaterThan || expression instanceof GreaterThanEquals
+                || expression instanceof MinorThan || expression instanceof MinorThanEquals)) {
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                    "Unsupported condition '" + expression
+                    + "'; supported comparators: =, !=, <, <=, >, >= combined with AND");
+        }
+
         expression.getLeftExpression().accept(this);
         expression.getRightExpression().accept(this);
 
@@ -248,7 +257,8 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
 
         if (expression instanceof Multiplication) {
             if (!(left instanceof IntValue l) || !(right instanceof IntValue r)) {
-                throw new QueryExecutionException("Arithmetic requires int operands: cannot multiply "
+                throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH,
+                        "Arithmetic requires int operands: cannot multiply "
                         + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
             }
             valueStack.push(new IntValue(l.v() * r.v()));
@@ -256,7 +266,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         }
 
         if (left.getClass() != right.getClass()) {
-            throw new QueryExecutionException("Type mismatch: cannot compare "
+            throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH, "Type mismatch: cannot compare "
                     + left.typeName() + " '" + left + "' with " + right.typeName() + " '" + right + "'");
         }
 
@@ -270,10 +280,8 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
             resultStack.push(left.compareTo(right) >= 0);
         } else if (expression instanceof MinorThan) {
             resultStack.push(left.compareTo(right) < 0);
-        } else if (expression instanceof MinorThanEquals) {
+        } else { // MinorThanEquals: the only type left after the guard above
             resultStack.push(left.compareTo(right) <= 0);
-        } else {
-            throw new UnsupportedOperationException("Unsupported binary expression: " + expression.getClass().getName());
         }
     }
     /**

@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.ExpressionEvaluator;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryExecutionException;
@@ -64,6 +65,7 @@ public class HashJoinOperator extends JoinOperator {
         while (true) {
             if (currentBucket != null) {
                 while (currentBucket.hasNext()) {
+                    checkBudgetDeadline(); // a skewed key's bucket can spin long without emitting
                     Tuple combined = combineTuples(currentOuterTuple, currentBucket.next());
                     if (probeEvaluator.evaluate(getJoinCondition(), combined)) {
                         countTuple();
@@ -90,6 +92,7 @@ public class HashJoinOperator extends JoinOperator {
         buildTable = new HashMap<>();
         Tuple tuple;
         while ((tuple = getChild().getNextTuple()) != null) {
+            checkBudgetDeadline(); // the build emits nothing; the timeout must still reach it
             buildTable.computeIfAbsent(extractKey(tuple, innerKeyIndices), k -> new ArrayList<>())
                     .add(tuple);
         }
@@ -128,7 +131,8 @@ public class HashJoinOperator extends JoinOperator {
         }
 
         if (outerKeyIndices.isEmpty()) {
-            throw new QueryExecutionException(
+            // the planner only selects hash join after hasEquiConjunct(); reaching here is a bug
+            throw new QueryExecutionException(ErrorCode.INTERNAL,
                     "Hash join selected for condition without a cross-side equality: '"
                             + getJoinCondition() + "'");
         }
@@ -158,7 +162,7 @@ public class HashJoinOperator extends JoinOperator {
         List<Value> sample = buildTable.keySet().iterator().next();
         for (int i = 0; i < outerKey.size(); i++) {
             if (!outerKey.get(i).getClass().equals(sample.get(i).getClass())) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH,
                         "Type mismatch in join key: cannot compare " + outerKey.get(i).typeName()
                                 + " with " + sample.get(i).typeName()
                                 + " in '" + getJoinCondition() + "'");
