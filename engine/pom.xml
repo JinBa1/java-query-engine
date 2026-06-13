@@ -57,7 +57,7 @@
             <path>
               <groupId>org.openjdk.jmh</groupId>
               <artifactId>jmh-generator-annprocess</artifactId>
-              <version>1.37</version>
+              <version>${jmh.version}</version>
             </path>
           </testAnnotationProcessorPaths>
         </configuration>
