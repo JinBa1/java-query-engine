@@ -1,12 +1,27 @@
 package com.github.jinba1.blazedb;
 
 /**
- * Thrown when query execution fails for a data- or type-related reason.
- * Messages state the operation, the column/literal involved, and both types,
- * so callers (and downstream LLM agents) can self-correct.
+ * Thrown when a query fails for a reason the caller can act on. Messages state the
+ * operation, the table/column/literal involved, and what is actually available,
+ * so callers (and downstream LLM agents) can self-correct; the {@link ErrorCode}
+ * classifies the failure without message parsing.
  */
 public class QueryExecutionException extends RuntimeException {
+
+    private final ErrorCode code;
+
+    /** Uncategorized failure; defaults to {@link ErrorCode#INTERNAL}. */
     public QueryExecutionException(String message) {
+        this(ErrorCode.INTERNAL, message);
+    }
+
+    public QueryExecutionException(ErrorCode code, String message) {
         super(message);
+        this.code = code;
+    }
+
+    /** The machine-readable category of this failure. */
+    public ErrorCode code() {
+        return code;
     }
 }

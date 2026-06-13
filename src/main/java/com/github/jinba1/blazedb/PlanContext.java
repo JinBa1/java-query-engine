@@ -118,6 +118,27 @@ public class PlanContext {
     }
 
     /**
+     * Comma-separated resolvable column names of a schema, in column order — for
+     * agent-legible error messages. Alias keys mapping to the same index are all
+     * listed, because each is a name the caller may legally write.
+     */
+    public String availableColumns(String schemaId) {
+        return formatColumns(getSchema(schemaId));
+    }
+
+    /** Formats a schema map as a comma-separated column list, ordered by index then name. */
+    public static String formatColumns(Map<String, Integer> schema) {
+        if (schema == null || schema.isEmpty()) {
+            return "(none)";
+        }
+        return schema.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    /**
      * Result-header names for a schema, in column order. Ported verbatim from
      * DBCatalog.getOrderedColumnNames: bare-ifies plain columns, keeps aggregate
      * keys whole, width = max index + 1, sorted-key determinism.

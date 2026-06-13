@@ -76,10 +76,6 @@ public class BlazeDB {
 			}
 
 			Operator rootOp = planned.root();
-			if (rootOp == null) {
-				System.err.println("Error: query could not be planned");
-				return 1;
-			}
 			if (maxTuples != null || timeoutMs != null) {
 				rootOp.attachBudget(new QueryBudget(maxTuples, timeoutMs));
 			}
@@ -90,6 +86,12 @@ public class BlazeDB {
 			return 1;
 		} catch (IOException e) {
 			System.err.println("Error: failed to write output: " + e.getMessage());
+			return 1;
+		} catch (RuntimeException e) {
+			// Engine bug, not a user error — fail with an exit code instead of an
+			// uncaught-exception crash; the trace stays on stderr for bug reports
+			System.err.println("Internal error: " + e);
+			e.printStackTrace();
 			return 1;
 		}
 	}
@@ -129,14 +131,16 @@ public class BlazeDB {
 					printer.printRecord(fields);
 				}
 			}
-		} catch (QueryExecutionException e) {
+		} catch (RuntimeException e) {
+			// QueryExecutionException and internal errors alike: never leave a
+			// truncated file that looks like a complete result
 			deletePartialOutput(outputFileObj, outputFile);
 			throw e;
 		} catch (IOException e) {
 			// Disk full, permissions, output path is a directory, ... — swallowing this
 			// would make a broken or missing file look like success to callers
 			deletePartialOutput(outputFileObj, outputFile);
-			throw new QueryExecutionException(
+			throw new QueryExecutionException(ErrorCode.DATA_ERROR,
 					"Failed to write output file '" + outputFile + "': " + e.getMessage());
 		}
 

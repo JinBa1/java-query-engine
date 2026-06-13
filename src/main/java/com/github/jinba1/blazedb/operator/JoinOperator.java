@@ -188,7 +188,9 @@ public class JoinOperator extends Operator {
         Map<String, Integer> leftSchemaMap = getSchemaMap(leftSchemaId);
         Map<String, Integer> rightSchemaMap = getSchemaMap(rightSchemaId);
         if (leftSchemaMap == null || rightSchemaMap == null) {
-            throw new RuntimeException("Could not retrieve schemas for join");
+            String missing = leftSchemaMap == null ? leftSchemaId : rightSchemaId;
+            throw new QueryExecutionException(ErrorCode.INTERNAL,
+                    "Could not retrieve schema '" + missing + "' for join");
         }
 
         // Create combined schema

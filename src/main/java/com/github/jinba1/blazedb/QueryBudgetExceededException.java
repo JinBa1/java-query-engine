@@ -6,6 +6,6 @@ package com.github.jinba1.blazedb;
  */
 public class QueryBudgetExceededException extends QueryExecutionException {
     public QueryBudgetExceededException(String message) {
-        super(message);
+        super(ErrorCode.BUDGET_EXCEEDED, message);
     }
 }

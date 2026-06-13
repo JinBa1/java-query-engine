@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
 import com.github.jinba1.blazedb.QueryExecutionException;
@@ -188,7 +189,7 @@ public abstract class Operator {
      * @param schemaId The schema identifier to resolve against
      * @param targetList Optional existing list to populate with resolved indices (will be cleared if not null)
      * @return A list of resolved column indices, either the provided targetList or a new ArrayList
-     * @throws RuntimeException If any column cannot be resolved in the specified schema
+     * @throws QueryExecutionException If any column cannot be resolved in the specified schema
      */
     protected List<Integer> resolveColumnIndices(List<Column> columns, String schemaId,
                                                  List<Integer> targetList) {
@@ -203,8 +204,9 @@ public abstract class Operator {
 
             Integer index = ctx.resolveColumnWithOrigins(schemaId, tableName, columnName);
             if (index == null) {
-                throw new RuntimeException("Column " + tableName + "." + columnName +
-                        " not found in schema " + schemaId);
+                throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
+                        "Column '" + tableName + "." + columnName + "' not found. Available: "
+                        + ctx.availableColumns(schemaId) + ".");
             }
 
             indices.add(index);

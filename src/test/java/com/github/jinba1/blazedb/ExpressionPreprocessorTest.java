@@ -165,8 +165,10 @@ public class ExpressionPreprocessorTest {
         // Table NonExistent doesn't exist
         Expression expr = CCJSqlParserUtil.parseExpression("NonExistent.A = 5");
 
-        assertThrows(UnsupportedOperationException.class, () -> ep.evaluate(expr),
-                "Should throw for nonexistent table");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> ep.evaluate(expr), "Should throw for nonexistent table");
+        assertEquals(ErrorCode.UNKNOWN_TABLE, ex.code());
+        assertTrue(ex.getMessage().contains("Available tables"), ex.getMessage());
     }
 
     @Test
@@ -175,8 +177,10 @@ public class ExpressionPreprocessorTest {
         // Column Z doesn't exist in T1
         Expression expr = CCJSqlParserUtil.parseExpression("T1.Z = 5");
 
-        assertThrows(UnsupportedOperationException.class, () -> ep.evaluate(expr),
-                "Should throw for nonexistent column");
+        QueryExecutionException ex = assertThrows(QueryExecutionException.class,
+                () -> ep.evaluate(expr), "Should throw for nonexistent column");
+        assertEquals(ErrorCode.UNKNOWN_COLUMN, ex.code());
+        assertTrue(ex.getMessage().contains("Available"), ex.getMessage());
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.ColumnType;
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.IntValue;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryExecutionException;
@@ -44,6 +45,11 @@ public class ScanOperator extends Operator {
         this.tableName = tableName;
         tablePath = DBCatalog.getInstance().getDBLocation(tableName);
         this.columnTypes = DBCatalog.getInstance().getColumnTypes(tableName);
+        if (tablePath == null || columnTypes == null) {
+            throw new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
+                    "Table '" + tableName + "' not found. Available tables: "
+                    + String.join(", ", DBCatalog.getInstance().getTableNames()) + ".");
+        }
         child = null; // Scan cannot have child operator
 
         this.schemaRegistered = true;
@@ -66,7 +72,8 @@ public class ScanOperator extends Operator {
                 records.next(); // skip header row
             }
         } catch (IOException e) {
-            throw new QueryExecutionException("Failed to open table '" + tableName + "': " + e.getMessage());
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Failed to open table '" + tableName + "': " + e.getMessage());
         }
     }
 
@@ -83,7 +90,8 @@ public class ScanOperator extends Operator {
         }
         CSVRecord record = records.next();
         if (record.size() != columnTypes.size()) {
-            throw new QueryExecutionException("Table '" + tableName + "' row " + record.getRecordNumber()
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Table '" + tableName + "' row " + record.getRecordNumber()
                     + ": expected " + columnTypes.size() + " fields, found " + record.size());
         }
         List<Value> attributes = new ArrayList<>(columnTypes.size());
@@ -93,7 +101,8 @@ public class ScanOperator extends Operator {
                 try {
                     attributes.add(new IntValue(Integer.parseInt(field)));
                 } catch (NumberFormatException e) {
-                    throw new QueryExecutionException("Table '" + tableName + "' row " + record.getRecordNumber()
+                    throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                            "Table '" + tableName + "' row " + record.getRecordNumber()
                             + ", column " + i + ": expected int, found '" + field
                             + "' (file changed since catalog init?)");
                 }

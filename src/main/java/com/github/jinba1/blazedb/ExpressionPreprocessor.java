@@ -164,7 +164,7 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
      * Visits a column reference and pushes its table name onto the stack.
      * Verifies that the column exists in the database schema.
      * @param column The column reference to visit
-     * @throws UnsupportedOperationException If the column or table doesn't exist
+     * @throws QueryExecutionException If the column or table doesn't exist
      */
     @Override
     public void visit(Column column) {
@@ -174,10 +174,15 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
             if (DBCatalog.getInstance().columnExists(tableName, columnName)) {
                 tableStack.push(tableName);
             } else {
-                throw new UnsupportedOperationException(String.format("Table %s does not have column %s", tableName, columnName));
+                throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
+                        "Column '" + columnName + "' not found in " + tableName + ". Available: "
+                        + PlanContext.formatColumns(
+                                DBCatalog.getInstance().getDBSchemata(tableName)) + ".");
             }
         } else {
-            throw new UnsupportedOperationException(String.format("Table %s does not exist", tableName));
+            throw new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
+                    "Table '" + tableName + "' not found. Available tables: "
+                    + String.join(", ", DBCatalog.getInstance().getTableNames()) + ".");
         }
     }
 
@@ -199,22 +204,27 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
      */
     @Override
     public void visitBinaryExpression(BinaryExpression expression) {
+        // Reject before visiting children: an unsupported operator (e.g. OR) has
+        // comparison operands that push nothing onto the table stack, so popping
+        // below would fail with an opaque EmptyStackException instead of this message
+        if (!(expression instanceof EqualsTo || expression instanceof NotEqualsTo
+                || expression instanceof GreaterThanEquals || expression instanceof GreaterThan
+                || expression instanceof MinorThan || expression instanceof MinorThanEquals)) {
+            throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                    "Unsupported condition '" + expression
+                    + "'; supported comparators: =, !=, <, <=, >, >= combined with AND");
+        }
+
         expression.getLeftExpression().accept(this);
         expression.getRightExpression().accept(this);
 
         String rightTable = tableStack.pop();
         String leftTable = tableStack.pop();
 
-        if (expression instanceof EqualsTo || expression instanceof NotEqualsTo
-        || expression instanceof GreaterThanEquals || expression instanceof GreaterThan
-        || expression instanceof MinorThan || expression instanceof MinorThanEquals) {
-            if ((rightTable != null && leftTable != null) && (!rightTable.equals(leftTable))) {
-                joinExpressions.add(expression);
-            } else {
-                selectExpressions.add(expression);
-            }
+        if ((rightTable != null && leftTable != null) && (!rightTable.equals(leftTable))) {
+            joinExpressions.add(expression);
         } else {
-            throw new UnsupportedOperationException("Unsupported binary expression: " + expression.getClass().getName());
+            selectExpressions.add(expression);
         }
 
     }

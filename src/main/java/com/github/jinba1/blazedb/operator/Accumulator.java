@@ -1,6 +1,7 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.AggregateCall;
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.IntValue;
 import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Value;
@@ -52,7 +53,7 @@ interface Accumulator {
         @Override
         public void add(Value value) {
             if (!(value instanceof IntValue iv)) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.TYPE_MISMATCH,
                         (average ? "AVG" : "SUM") + " requires int values; got " + value.typeName()
                                 + " value '" + value + "' in '" + schemaKey + "'");
             }
@@ -64,7 +65,7 @@ interface Accumulator {
         public Value result() {
             long raw = average ? sum / count : sum;
             if (raw < Integer.MIN_VALUE || raw > Integer.MAX_VALUE) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.DATA_ERROR,
                         (average ? "AVG" : "SUM") + " overflow: " + raw
                                 + " exceeds int range in '" + schemaKey + "'");
             }
@@ -93,7 +94,7 @@ interface Accumulator {
         @Override
         public Value result() {
             if (count > Integer.MAX_VALUE) {
-                throw new QueryExecutionException(
+                throw new QueryExecutionException(ErrorCode.DATA_ERROR,
                         "COUNT overflow: " + count + " exceeds int range in '" + schemaKey + "'");
             }
             return new IntValue((int) count);
