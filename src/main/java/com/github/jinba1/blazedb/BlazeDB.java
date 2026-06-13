@@ -9,6 +9,7 @@ import java.util.List;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
 
+import com.github.jinba1.blazedb.operator.LimitOperator;
 import com.github.jinba1.blazedb.operator.Operator;
 
 /**
@@ -106,8 +107,9 @@ public class BlazeDB {
 	 * on the root object of the operator tree. Writes the result to `outputFile`.
 	 * @param root       The root operator of the operator tree (assumed to be non-null).
 	 * @param outputFile The name of the file where the result will be written.
+	 * @return Execution metadata: rows written, LIMIT truncation, refine hint.
 	 */
-	public static void execute(Operator root, String outputFile) {
+	public static QueryResult execute(Operator root, String outputFile) {
 		File outputFileObj = new File(outputFile);
 		File parentDir = outputFileObj.getParentFile();
 		if (parentDir != null && !parentDir.exists()) {
@@ -119,6 +121,7 @@ public class BlazeDB {
 
 		List<String> headers = root.getContext().getOrderedColumnNames(root.propagateSchemaId());
 		CSVFormat format = CSVFormat.RFC4180.builder().setRecordSeparator("\n").build();
+		long rows = 0;
 		try {
 			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
 				printer.printRecord(headers);
@@ -129,6 +132,7 @@ public class BlazeDB {
 						fields.add(v.toString());
 					}
 					printer.printRecord(fields);
+					rows++;
 				}
 			}
 		} catch (RuntimeException e) {
@@ -144,8 +148,14 @@ public class BlazeDB {
 					"Failed to write output file '" + outputFile + "': " + e.getMessage());
 		}
 
+		// The planner places Limit topmost, so the root knows whether the cap cut the result
+		boolean truncated = root instanceof LimitOperator limitOp && limitOp.wasTruncated();
+		QueryResult result = truncated ? QueryResult.truncated(rows) : QueryResult.complete(rows);
+
 		System.out.println("Query executed successfully!");
 		System.out.println("Output file: " + outputFile);
+		System.out.println("Rows: " + rows + (truncated ? " (truncated; more rows exist)" : ""));
+		return result;
 	}
 
 	/** Never leave a truncated file that looks like a complete result. */
