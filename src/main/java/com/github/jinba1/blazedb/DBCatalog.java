@@ -202,6 +202,19 @@ public class DBCatalog {
     }
 
     /**
+     * Builds the standard unknown-table failure, listing what is available so an
+     * agent caller can self-correct. One construction site keeps the wording from
+     * drifting between the FROM-clause and WHERE-clause detection paths.
+     * @param tableName The table name that failed to resolve
+     * @return The exception to throw; never null
+     */
+    public QueryExecutionException unknownTable(String tableName) {
+        return new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
+                "Table '" + tableName + "' not found. Available tables: "
+                + String.join(", ", getTableNames()) + ".");
+    }
+
+    /**
      * Checks if a specified table exists in the database.
      * @param tableName The name of the table to check
      * @return true if the table exists, false otherwise

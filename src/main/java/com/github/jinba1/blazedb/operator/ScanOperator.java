@@ -46,9 +46,7 @@ public class ScanOperator extends Operator {
         tablePath = DBCatalog.getInstance().getDBLocation(tableName);
         this.columnTypes = DBCatalog.getInstance().getColumnTypes(tableName);
         if (tablePath == null || columnTypes == null) {
-            throw new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
-                    "Table '" + tableName + "' not found. Available tables: "
-                    + String.join(", ", DBCatalog.getInstance().getTableNames()) + ".");
+            throw DBCatalog.getInstance().unknownTable(tableName);
         }
         child = null; // Scan cannot have child operator
 

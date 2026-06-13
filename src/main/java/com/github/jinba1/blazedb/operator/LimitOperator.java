@@ -1,7 +1,7 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.PlanContext;
-import com.github.jinba1.blazedb.QueryBudgetExceededException;
+import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Tuple;
 
 import java.util.HashMap;
@@ -59,10 +59,10 @@ public class LimitOperator extends Operator {
         peeked = true;
         try {
             truncated = child.getNextTuple() != null;
-        } catch (QueryBudgetExceededException e) {
-            // The capped result is already complete; killing the query (and deleting
-            // its output) over this metadata probe would be absurd. Budget exhaustion
-            // while probing for more rows honestly reads as "result may be incomplete".
+        } catch (QueryExecutionException e) {
+            // The capped result is already complete; rows past the cap are not part
+            // of the answer, so neither budget exhaustion nor a bad row there may
+            // fail the query. Either reads honestly as "result may be incomplete".
             truncated = true;
         }
     }

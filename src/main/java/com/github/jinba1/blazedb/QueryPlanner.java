@@ -424,7 +424,6 @@ public class QueryPlanner {
             if (expr instanceof Column) {
                 Column column = (Column) expr;
                 groupByColumns.add(column);
-//                        column.getTable().getName() + "." + column.getColumnName());
             } else {
                 throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
                         "GROUP BY supports only column references; got '" + expr + "'");

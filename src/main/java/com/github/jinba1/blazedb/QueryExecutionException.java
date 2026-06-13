@@ -15,6 +15,7 @@ public class QueryExecutionException extends RuntimeException {
         this(ErrorCode.INTERNAL, message);
     }
 
+    /** Categorized failure; {@code code} classifies the error for programmatic handling. */
     public QueryExecutionException(ErrorCode code, String message) {
         super(message);
         this.code = code;

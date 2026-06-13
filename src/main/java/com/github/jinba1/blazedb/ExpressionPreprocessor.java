@@ -180,9 +180,7 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
                                 DBCatalog.getInstance().getDBSchemata(tableName)) + ".");
             }
         } else {
-            throw new QueryExecutionException(ErrorCode.UNKNOWN_TABLE,
-                    "Table '" + tableName + "' not found. Available tables: "
-                    + String.join(", ", DBCatalog.getInstance().getTableNames()) + ".");
+            throw DBCatalog.getInstance().unknownTable(tableName);
         }
     }
 

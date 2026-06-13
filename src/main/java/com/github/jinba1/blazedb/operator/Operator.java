@@ -1,6 +1,5 @@
 package com.github.jinba1.blazedb.operator;
 
-import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
 import com.github.jinba1.blazedb.QueryExecutionException;
@@ -94,7 +93,9 @@ public abstract class Operator {
     }
 
     /**
-     * Attaches a query budget to this operator and its entire subtree.
+     * Attaches a query budget to this operator and its entire subtree. May be called
+     * at any point — operators consult the budget on each tuple/check, so attaching
+     * mid-execution simply starts enforcement from that point on.
      * @param budget The budget shared by all operators of one query
      */
     public void attachBudget(QueryBudget budget) {
@@ -204,9 +205,7 @@ public abstract class Operator {
 
             Integer index = ctx.resolveColumnWithOrigins(schemaId, tableName, columnName);
             if (index == null) {
-                throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
-                        "Column '" + tableName + "." + columnName + "' not found. Available: "
-                        + ctx.availableColumns(schemaId) + ".");
+                throw ctx.unknownColumn(tableName, columnName, schemaId);
             }
 
             indices.add(index);

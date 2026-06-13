@@ -82,6 +82,18 @@ public class LimitTruncationTest {
     }
 
     @Test
+    public void dataErrorDuringPeekMeansTruncatedNotKilled() throws IOException {
+        // Rows past the cap are not part of the answer; a malformed row there must
+        // not fail the already-complete capped result. Corrupt row 3 after catalog
+        // init (column already inferred as int) so only the peek's read trips.
+        Files.writeString(tempDb.resolve("data").resolve("T.csv"), "a\n1\n2\nnot-an-int\n");
+        LimitOperator limit = new LimitOperator(ctx, new ScanOperator(ctx, "T"), 2);
+
+        assertEquals(2, drain(limit));
+        assertTrue(limit.wasTruncated());
+    }
+
+    @Test
     public void budgetExhaustionDuringPeekMeansTruncatedNotKilled() {
         // 3-row scan, LIMIT 2: emitting both rows costs 4 charges (2 scan + 2 limit);
         // the peek's third scan row is charge 5 and trips the budget. The query already

@@ -254,9 +254,7 @@ public class AggregateOperator extends Operator {
                 // Record source column
                 Integer sourceIndex = ctx.resolveColumnWithOrigins(childSchemaId, tableName, columnName);
                 if (sourceIndex == null) {
-                    throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
-                            "Column '" + tableName + "." + columnName + "' not found. Available: "
-                            + ctx.availableColumns(childSchemaId) + ".");
+                    throw ctx.unknownColumn(tableName, columnName, childSchemaId);
                 }
                 transformationDetails.put(key, "group_by:" + sourceIndex);
 

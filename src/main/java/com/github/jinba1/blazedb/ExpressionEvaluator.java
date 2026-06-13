@@ -68,8 +68,6 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
             throw new RuntimeException("Expression evaluation did not produce a result");
         }
 
-        boolean result = resultStack.peek();
-
         return resultStack.pop();
     }
 
@@ -205,9 +203,7 @@ public class ExpressionEvaluator extends ExpressionVisitorAdapter {
         }
 
         if (colIdx == null) {
-            throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
-                    "Column '" + tableName + "." + columnName + "' not found. Available: "
-                    + ctx.availableColumns(schemaId) + ".");
+            throw ctx.unknownColumn(tableName, columnName, schemaId);
         }
 
         valueStack.push(currentTuple.getAttribute(colIdx));
