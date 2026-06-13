@@ -64,6 +64,7 @@ public class HashJoinOperator extends JoinOperator {
         while (true) {
             if (currentBucket != null) {
                 while (currentBucket.hasNext()) {
+                    checkBudgetDeadline(); // a skewed key's bucket can spin long without emitting
                     Tuple combined = combineTuples(currentOuterTuple, currentBucket.next());
                     if (probeEvaluator.evaluate(getJoinCondition(), combined)) {
                         countTuple();
@@ -90,6 +91,7 @@ public class HashJoinOperator extends JoinOperator {
         buildTable = new HashMap<>();
         Tuple tuple;
         while ((tuple = getChild().getNextTuple()) != null) {
+            checkBudgetDeadline(); // the build emits nothing; the timeout must still reach it
             buildTable.computeIfAbsent(extractKey(tuple, innerKeyIndices), k -> new ArrayList<>())
                     .add(tuple);
         }

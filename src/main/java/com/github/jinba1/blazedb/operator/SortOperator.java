@@ -115,6 +115,7 @@ public class SortOperator extends Operator {
             Tuple tuple = child.getNextTuple();
 
             while (tuple != null) {
+                checkBudgetDeadline(); // buffering emits nothing; the timeout must still reach it
                 tupleBuffer.add(tuple);  // Only add non-null tuples
                 tuple = child.getNextTuple();
             }

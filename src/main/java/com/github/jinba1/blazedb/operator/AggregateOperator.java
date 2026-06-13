@@ -152,6 +152,7 @@ public class AggregateOperator extends Operator {
     private void processChildTuples() {
         Tuple tuple;
         while ((tuple = child.getNextTuple()) != null) {
+            checkBudgetDeadline(); // accumulation emits nothing; the timeout must still reach it
             List<Value> groupKey = new ArrayList<>();
             for (Integer index : groupByIndices) {
                 groupKey.add(tuple.getAttribute(index));

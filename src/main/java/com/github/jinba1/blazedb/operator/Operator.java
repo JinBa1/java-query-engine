@@ -82,6 +82,17 @@ public abstract class Operator {
     }
 
     /**
+     * Checks the time budget without counting a tuple. Blocking operators call this
+     * once per iteration of their build/drain loops, where {@link #countTuple()} is
+     * unreachable until the phase completes.
+     */
+    protected final void checkBudgetDeadline() {
+        if (budget != null) {
+            budget.checkDeadline();
+        }
+    }
+
+    /**
      * Attaches a query budget to this operator and its entire subtree.
      * @param budget The budget shared by all operators of one query
      */

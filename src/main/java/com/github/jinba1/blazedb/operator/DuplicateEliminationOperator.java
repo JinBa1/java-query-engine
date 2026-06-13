@@ -68,6 +68,7 @@ public class DuplicateEliminationOperator extends Operator {
         // Process each tuple from the child operator
         Tuple childTuple;
         while ((childTuple = child.getNextTuple()) != null) {
+            checkBudgetDeadline(); // dedup emits nothing; the timeout must still reach it
             // The HashSet will use Tuple's equals() and hashCode() methods
             // to determine if a tuple is already in the set
             if (uniqueSet.add(childTuple)) {
