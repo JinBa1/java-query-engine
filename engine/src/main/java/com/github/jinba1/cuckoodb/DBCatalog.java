@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -29,17 +30,19 @@ public class DBCatalog {
 
     private static DBCatalog instance;
 
-    private final Map<String, Path> dbLocations;
-    private final Map<String, Map<String, Integer>> dbSchemata;
-    private final Map<String, List<ColumnType>> dbColumnTypes;
+    /**
+     * One entry per table, each a fully-populated {@link TableMeta} (location + schema +
+     * types). A single map means a table is published with one atomic write and read with
+     * one atomic lookup — no torn state across what used to be three parallel maps. This is
+     * what makes runtime {@link #registerTable} safe against concurrent readers.
+     */
+    private final Map<String, TableMeta> tables;
 
     /**
      * Private constructor to ensure singleton design.
      */
     private DBCatalog() {
-        dbLocations = new java.util.concurrent.ConcurrentHashMap<>();
-        dbSchemata = new java.util.concurrent.ConcurrentHashMap<>();
-        dbColumnTypes = new java.util.concurrent.ConcurrentHashMap<>();
+        tables = new ConcurrentHashMap<>();
     }
 
     /**
@@ -94,7 +97,7 @@ public class DBCatalog {
             for (Path csv : csvs) {
                 String fileName = csv.getFileName().toString();
                 String tableName = fileName.substring(0, fileName.length() - 4);
-                loadTable(tableName, csv);
+                tables.put(tableName, parseTable(tableName, csv));
             }
         } catch (IOException e) {
             throw new QueryExecutionException(ErrorCode.DATA_ERROR,
@@ -102,7 +105,36 @@ public class DBCatalog {
         }
     }
 
-    private void loadTable(String tableName, Path csv) throws IOException {
+    /**
+     * Registers a single table at runtime from a CSV file, for callers (the REST gateway)
+     * that add tables after startup. Parses and infers the schema with the same rules as
+     * directory load, then publishes the table with one atomic {@code putIfAbsent}.
+     * <p>
+     * Returns {@code false} (and leaves the existing table untouched) when a table of that
+     * name already exists — the caller's 409 signal. Never {@code containsKey}-then-{@code put},
+     * which would reintroduce the race this design removes.
+     * @param tableName the catalog name to publish under
+     * @param csv       the CSV file backing the table; must outlive every query that scans it
+     * @return {@code true} if this call registered the table; {@code false} if the name was taken
+     * @throws QueryExecutionException with {@link ErrorCode#DATA_ERROR} if the CSV is malformed
+     */
+    public boolean registerTable(String tableName, Path csv) {
+        TableMeta meta;
+        try {
+            meta = parseTable(tableName, csv);
+        } catch (IOException e) {
+            throw new QueryExecutionException(ErrorCode.DATA_ERROR,
+                    "Could not read table '" + tableName + "' from " + csv + ": " + e.getMessage());
+        }
+        return tables.putIfAbsent(tableName, meta) == null;
+    }
+
+    /**
+     * Parses one CSV into table metadata: column names from the header row, types inferred
+     * from the data rows. Pure (no map writes) so both directory load and {@link #registerTable}
+     * share identical parse-and-infer rules. The returned schema and types are unmodifiable.
+     */
+    private static TableMeta parseTable(String tableName, Path csv) throws IOException {
         CSVFormat format = CSVFormat.RFC4180.builder()
                 .setIgnoreSurroundingSpaces(true)
                 .build();
@@ -146,9 +178,9 @@ public class DBCatalog {
                 types.add(isInt[i] ? ColumnType.INT : ColumnType.STRING);
             }
 
-            dbSchemata.put(tableName, Collections.unmodifiableMap(columnMap));
-            dbColumnTypes.put(tableName, Collections.unmodifiableList(types));
-            dbLocations.put(tableName, csv);
+            return new TableMeta(csv,
+                    Collections.unmodifiableMap(columnMap),
+                    Collections.unmodifiableList(types));
         }
     }
 
@@ -163,12 +195,24 @@ public class DBCatalog {
     }
 
     /**
+     * Returns the full metadata for a table in one atomic lookup, or null if absent.
+     * Callers that need more than one of location/schema/types (e.g. ScanOperator) use
+     * this so the fields they read are guaranteed to come from the same registration.
+     * @param tableName The name of the table
+     * @return The table's metadata, or null if the table is not in the catalog
+     */
+    public TableMeta getTableMeta(String tableName) {
+        return tables.get(tableName);
+    }
+
+    /**
      * Returns the file path for a specified table.
      * @param tableName The name of the table
      * @return The Path object representing the table's data file location
      */
     public Path getDBLocation(String tableName) {
-        return dbLocations.get(tableName);
+        TableMeta meta = tables.get(tableName);
+        return meta == null ? null : meta.path();
     }
 
     /**
@@ -178,7 +222,8 @@ public class DBCatalog {
      * @return A map from column names to their positions (indices)
      */
     public Map<String, Integer> getDBSchemata(String tableName) {
-        return dbSchemata.get(tableName);
+        TableMeta meta = tables.get(tableName);
+        return meta == null ? null : meta.schema();
     }
 
     /**
@@ -187,7 +232,8 @@ public class DBCatalog {
      * @return A list of ColumnType values in column order, or null if table not found
      */
     public List<ColumnType> getColumnTypes(String tableName) {
-        return dbColumnTypes.get(tableName);
+        TableMeta meta = tables.get(tableName);
+        return meta == null ? null : meta.types();
     }
 
     /**
@@ -196,7 +242,7 @@ public class DBCatalog {
      * @return The sorted list of loaded table names
      */
     public List<String> getTableNames() {
-        List<String> names = new ArrayList<>(dbLocations.keySet());
+        List<String> names = new ArrayList<>(tables.keySet());
         Collections.sort(names);
         return names;
     }
@@ -220,7 +266,7 @@ public class DBCatalog {
      * @return true if the table exists, false otherwise
      */
     public boolean tableExists(String tableName) {
-        return (dbLocations.containsKey(tableName) && dbSchemata.containsKey(tableName));
+        return tables.containsKey(tableName);
     }
 
     /**
@@ -230,9 +276,10 @@ public class DBCatalog {
      * @return true if the column exists in the table, false otherwise
      */
     public boolean columnExists(String tableName, String columnName) {
-        if (!tableExists(tableName)) {
+        TableMeta meta = tables.get(tableName);
+        if (meta == null) {
             return false;
         }
-        return dbSchemata.get(tableName).containsKey(columnName.toLowerCase());
+        return meta.schema().containsKey(columnName.toLowerCase());
     }
 }

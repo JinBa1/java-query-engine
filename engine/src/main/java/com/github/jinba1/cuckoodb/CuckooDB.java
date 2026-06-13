@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -125,15 +126,13 @@ public class CuckooDB {
 		try {
 			try (CSVPrinter printer = new CSVPrinter(new FileWriter(outputFile), format)) {
 				printer.printRecord(headers);
-				Tuple tuple;
-				while ((tuple = root.getNextTuple()) != null) {
+				rows = drain(root, tuple -> {
 					List<String> fields = new ArrayList<>(tuple.getTuple().size());
 					for (Value v : tuple.getTuple()) {
 						fields.add(v.toString());
 					}
 					printer.printRecord(fields);
-					rows++;
-				}
+				});
 			}
 		} catch (RuntimeException e) {
 			// QueryExecutionException and internal errors alike: never leave a
@@ -148,14 +147,111 @@ public class CuckooDB {
 					"Failed to write output file '" + outputFile + "': " + e.getMessage());
 		}
 
-		// The planner places Limit topmost, so the root knows whether the cap cut the result
-		boolean truncated = root instanceof LimitOperator limitOp && limitOp.wasTruncated();
+		boolean truncated = wasTruncated(root);
 		QueryResult result = truncated ? QueryResult.truncated(rows) : QueryResult.complete(rows);
 
 		System.out.println("Query executed successfully!");
 		System.out.println("Output file: " + outputFile);
 		System.out.println("Rows: " + rows + (truncated ? " (truncated; more rows exist)" : ""));
 		return result;
+	}
+
+	/**
+	 * Drains the plan into an in-memory result set — column metadata, positional rows, and the
+	 * same truncation/hint signal {@link #execute} reports, but with no stdout and no file write.
+	 * This is the library/REST entry point; the CLI keeps using {@link #execute}. Both share
+	 * {@link #drain}, so they cannot diverge in iteration, row count, or truncation semantics.
+	 * @param root the root operator of an executable plan (never null; EXPLAIN is handled before here)
+	 * @return the fully-materialized result
+	 */
+	public static QueryResultSet executeToResultSet(Operator root) {
+		String schemaId = root.propagateSchemaId();
+		List<String> names = root.getContext().getOrderedColumnNames(schemaId);
+		List<List<Value>> rows = new ArrayList<>();
+		try {
+			drain(root, tuple -> rows.add(List.copyOf(tuple.getTuple())));
+		} catch (IOException e) {
+			// The in-memory sink does no I/O; drain only declares IOException for the CSV path.
+			throw new QueryExecutionException(ErrorCode.INTERNAL,
+					"Unexpected I/O while draining query result: " + e.getMessage());
+		}
+		boolean truncated = wasTruncated(root);
+		String hint = truncated ? QueryResult.truncated(rows.size()).hint() : null;
+		List<ColumnMeta> columns = buildColumns(root.getContext(), schemaId, names, rows);
+		return new QueryResultSet(columns, rows, truncated, hint);
+	}
+
+	/**
+	 * Pulls every tuple from the plan to EOF, handing each to {@code sink}, and returns the row
+	 * count. The single drain point for both result paths: truncation can only be read once this
+	 * has run to a null tuple, so sharing it keeps the file and in-memory paths consistent.
+	 */
+	private static long drain(Operator root, TupleSink sink) throws IOException {
+		long rows = 0;
+		Tuple tuple;
+		while ((tuple = root.getNextTuple()) != null) {
+			sink.accept(tuple);
+			rows++;
+		}
+		return rows;
+	}
+
+	/** A per-tuple action that may fail with an I/O error (the CSV writer's printRecord does). */
+	@FunctionalInterface
+	private interface TupleSink {
+		void accept(Tuple tuple) throws IOException;
+	}
+
+	/**
+	 * Whether a LIMIT cut the result short. The planner places LIMIT topmost, so only the root
+	 * can report this, and only after the drain reached EOF (the peek past the cap has happened).
+	 */
+	private static boolean wasTruncated(Operator root) {
+		return root instanceof LimitOperator limitOp && limitOp.wasTruncated();
+	}
+
+	/**
+	 * Builds per-position column metadata for a result set. {@code name} is the bare header
+	 * (table prefix stripped, aggregate keys kept whole); {@code qualifiedName} is the dotted,
+	 * non-aggregate schema key for that index when one exists (null for single-table scans and
+	 * computed columns); {@code type} is inferred from the first row, or null for an empty result.
+	 */
+	private static List<ColumnMeta> buildColumns(PlanContext ctx, String schemaId,
+			List<String> names, List<List<Value>> rows) {
+		int width = names.size();
+		String[] qualified = new String[width];
+		Map<String, Integer> schema = ctx.getSchema(schemaId);
+		if (schema != null) {
+			for (Map.Entry<String, Integer> entry : schema.entrySet()) {
+				String key = entry.getKey();
+				int idx = entry.getValue();
+				// A dotted, non-aggregate key (e.g. "Student.a") is the column's qualified
+				// origin. Aggregate keys like "sum(student.c)" also contain '.', but are not
+				// origins, so the '(' check excludes them. Lowercased to match the bare
+				// `name` and the engine's lowercase-header convention (-> "student.a").
+				if (idx >= 0 && idx < width && key.indexOf('.') >= 0 && key.indexOf('(') < 0) {
+					qualified[idx] = key.toLowerCase();
+				}
+			}
+		}
+		List<Value> firstRow = rows.isEmpty() ? null : rows.get(0);
+		List<ColumnMeta> columns = new ArrayList<>(width);
+		for (int i = 0; i < width; i++) {
+			ColumnType type = firstRow == null ? null : inferType(firstRow.get(i));
+			columns.add(new ColumnMeta(names.get(i), qualified[i], type));
+		}
+		return columns;
+	}
+
+	/** Maps a runtime value to its column type. Exhaustive over the sealed {@link Value}. */
+	private static ColumnType inferType(Value value) {
+		if (value instanceof IntValue) {
+			return ColumnType.INT;
+		} else if (value instanceof StringValue) {
+			return ColumnType.STRING;
+		}
+		throw new QueryExecutionException(ErrorCode.INTERNAL,
+				"Unknown value type: " + value.getClass().getName());
 	}
 
 	/** Never leave a truncated file that looks like a complete result. */

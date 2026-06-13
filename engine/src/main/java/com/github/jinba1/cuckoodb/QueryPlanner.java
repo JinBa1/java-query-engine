@@ -79,8 +79,6 @@ public class QueryPlanner {
      *         with an {@link ErrorCode} and a message the caller can act on
      */
     public static PlannedQuery planQuery(String filename, QueryConfig config) {
-        PlanContext ctx = new PlanContext(config);
-
         Statement statement;
         try {
             statement = CCJSqlParserUtil.parse(new FileReader(filename));
@@ -91,6 +89,46 @@ public class QueryPlanner {
             throw new QueryExecutionException(ErrorCode.DATA_ERROR,
                     "Could not read query file '" + filename + "': " + e.getMessage());
         }
+        return planFrom(statement, config);
+    }
+
+    /**
+     * Plans one query from SQL held in memory — the library/REST entry point. Parses the
+     * text, then runs the identical statement-level pipeline as the file overload, so a
+     * query planned from a string and the same query planned from a file are byte-for-byte
+     * the same plan (and EXPLAIN renders identically).
+     *
+     * <p>Named {@code planSql} rather than overloading {@code planQuery(String, QueryConfig)}
+     * because that signature already exists for the file path; both take a {@code String}, so
+     * a distinct name is the only unambiguous way to mean "this argument is SQL text, not a
+     * path". Read-only-by-construction holds across the parser: a non-SELECT statement is
+     * rejected as {@link ErrorCode#UNSUPPORTED_SQL} and multi-statement input fails to parse
+     * ({@link ErrorCode#PARSE_ERROR}). Unlike the file overload there is no I/O, so no
+     * {@code DATA_ERROR} branch.
+     * @param sql    the SQL query text (optionally EXPLAIN-prefixed); not a file path
+     * @param config the per-query planner configuration
+     * @return the planned query; the root is never null
+     * @throws QueryExecutionException with an {@link ErrorCode} the caller can act on
+     */
+    public static PlannedQuery planSql(String sql, QueryConfig config) {
+        Statement statement;
+        try {
+            statement = CCJSqlParserUtil.parse(sql);
+        } catch (JSQLParserException e) {
+            throw new QueryExecutionException(ErrorCode.PARSE_ERROR,
+                    "SQL syntax error: " + parserMessage(e));
+        }
+        return planFrom(statement, config);
+    }
+
+    /**
+     * The shared planning core: takes an already-parsed statement and produces the optimized,
+     * executable plan (plus EXPLAIN text when the statement is EXPLAIN-prefixed). Both source
+     * overloads delegate here so source format can never change the resulting plan. EXPLAIN
+     * detection and optimization happen at this statement level, identically for every source.
+     */
+    private static PlannedQuery planFrom(Statement statement, QueryConfig config) {
+        PlanContext ctx = new PlanContext(config);
 
         boolean explain = false;
         Select select;
