@@ -1,9 +1,13 @@
 package com.github.jinba1.blazedb.operator;
 
 import com.github.jinba1.blazedb.DBCatalog;
+import com.github.jinba1.blazedb.ErrorCode;
+import com.github.jinba1.blazedb.IntValue;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryBudget;
 import com.github.jinba1.blazedb.QueryConfig;
+import com.github.jinba1.blazedb.QueryExecutionException;
+import com.github.jinba1.blazedb.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -91,6 +95,59 @@ public class LimitTruncationTest {
 
         assertEquals(2, drain(limit));
         assertTrue(limit.wasTruncated());
+    }
+
+    /** Emits two tuples, then throws an INTERNAL error — simulates an engine bug. */
+    private static final class FailsAfterTwo extends Operator {
+        private int served = 0;
+
+        FailsAfterTwo(PlanContext ctx) {
+            super(ctx);
+            this.schemaRegistered = true;
+            this.intermediateSchemaId = "T";
+        }
+
+        @Override
+        public Tuple getNextTuple() {
+            if (served < 2) {
+                served++;
+                return new Tuple(List.of(new IntValue(served)));
+            }
+            throw new QueryExecutionException(ErrorCode.INTERNAL, "invariant broke");
+        }
+
+        @Override
+        public void reset() {
+            served = 0;
+        }
+
+        @Override
+        public String propagateSchemaId() {
+            return "T";
+        }
+
+        @Override
+        public String describe() {
+            return "FailsAfterTwo";
+        }
+
+        @Override
+        protected void registerSchema() {
+            schemaRegistered = true;
+        }
+    }
+
+    @Test
+    public void internalErrorDuringPeekPropagates() {
+        // User-facing failures past the cap read as truncated; engine bugs must not
+        // be masked as truncation metadata.
+        LimitOperator limit = new LimitOperator(ctx, new FailsAfterTwo(ctx), 2);
+        assertNotNull(limit.getNextTuple());
+        assertNotNull(limit.getNextTuple());
+
+        QueryExecutionException ex =
+                assertThrows(QueryExecutionException.class, limit::getNextTuple);
+        assertEquals(ErrorCode.INTERNAL, ex.code());
     }
 
     @Test

@@ -182,7 +182,7 @@ public class QueryPlanner {
      * @return The root operator of the join tree
      */
     private static Operator processJoins(PlanContext ctx, Operator rootOp, Select select) {
-        ExpressionPreprocessor preprocessor = new ExpressionPreprocessor();
+        ExpressionPreprocessor preprocessor = new ExpressionPreprocessor(ctx);
 
         Expression whereExpression = select.getPlainSelect().getWhere();
 

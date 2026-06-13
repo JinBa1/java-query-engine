@@ -30,6 +30,7 @@ import java.util.List;
  */
 public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
 
+    private final PlanContext ctx;
     private final Stack<String> tableStack; // track table references
     private final List<Expression> joinExpressions;
     private final List<Expression> selectExpressions;
@@ -38,8 +39,10 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
     /**
      * Constructs a new ExpressionPreprocessor.
      * Initializes internal data structures for tracking table references and expressions.
+     * @param ctx The per-query context, used to build resolution-failure messages
      */
-    public ExpressionPreprocessor() {
+    public ExpressionPreprocessor(PlanContext ctx) {
+        this.ctx = ctx;
         tableStack = new Stack<>();
         joinExpressions = new LinkedList<>();
         selectExpressions = new LinkedList<>();
@@ -174,10 +177,9 @@ public class ExpressionPreprocessor extends ExpressionVisitorAdapter {
             if (DBCatalog.getInstance().columnExists(tableName, columnName)) {
                 tableStack.push(tableName);
             } else {
-                throw new QueryExecutionException(ErrorCode.UNKNOWN_COLUMN,
-                        "Column '" + columnName + "' not found in " + tableName + ". Available: "
-                        + PlanContext.formatColumns(
-                                DBCatalog.getInstance().getDBSchemata(tableName)) + ".");
+                // base-table name doubles as its schema id, so the shared
+                // construction site applies here too
+                throw ctx.unknownColumn(tableName, columnName, tableName);
             }
         } else {
             throw DBCatalog.getInstance().unknownTable(tableName);

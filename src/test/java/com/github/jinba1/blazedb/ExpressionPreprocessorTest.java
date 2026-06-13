@@ -20,6 +20,8 @@ public class ExpressionPreprocessorTest {
     private static final String TEST_DB_DIR = "src/test/resources/testdb_ep";
     private static final String DATA_DIR = TEST_DB_DIR + "/data";
 
+    private PlanContext ctx;
+
     @BeforeEach
     public void setUp() throws IOException {
         Files.createDirectories(Paths.get(DATA_DIR));
@@ -36,6 +38,7 @@ public class ExpressionPreprocessorTest {
 
         DBCatalog.resetDBCatalog();
         DBCatalog.initDBCatalog(TEST_DB_DIR);
+        ctx = new PlanContext(QueryConfig.defaults());
     }
 
     @AfterEach
@@ -48,7 +51,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testSingleTableSelectionGoesToSelectExpressions() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A = 5");
 
         ep.evaluate(expr);
@@ -62,7 +65,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testJoinConditionGoesToJoinExpressions() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A = T2.C");
 
         ep.evaluate(expr);
@@ -76,7 +79,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testMixedAndExpressionCorrectlySplit() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         // T1.A = 5 AND T1.B = T2.D
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A = 5 AND T1.B = T2.D");
 
@@ -91,7 +94,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testCompoundAndAllSelections() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A > 1 AND T1.B < 100");
 
         ep.evaluate(expr);
@@ -105,7 +108,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testCompoundAndAllJoins() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A = T2.C AND T1.B = T2.D");
 
         ep.evaluate(expr);
@@ -119,7 +122,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testNestedAndWithJoinAndSelection() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         // Three-way AND: two selections + one join
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A > 1 AND T1.B = T2.D AND T2.C < 50");
 
@@ -134,7 +137,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testEvaluateThrowsOnSecondCall() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A = 5");
 
         ep.evaluate(expr);
@@ -145,7 +148,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testGetJoinExpressionsThrowsBeforeEvaluate() {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
 
         assertThrows(IllegalStateException.class, ep::getJoinExpressions,
                 "Should throw when getJoinExpressions called before evaluate");
@@ -153,7 +156,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testGetSelectExpressionsThrowsBeforeEvaluate() {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
 
         assertThrows(IllegalStateException.class, ep::getSelectExpressions,
                 "Should throw when getSelectExpressions called before evaluate");
@@ -161,7 +164,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testUnsupportedColumnThrows() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         // Table NonExistent doesn't exist
         Expression expr = CCJSqlParserUtil.parseExpression("NonExistent.A = 5");
 
@@ -173,7 +176,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testUnsupportedColumnInTableThrows() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         // Column Z doesn't exist in T1
         Expression expr = CCJSqlParserUtil.parseExpression("T1.Z = 5");
 
@@ -185,7 +188,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testDifferentComparisonOperators() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         // != join
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A != T2.C");
 
@@ -197,7 +200,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testGreaterThanJoin() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A > T2.C");
 
         ep.evaluate(expr);
@@ -207,7 +210,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testLessThanOrEqualSelection() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.A <= 10");
 
         ep.evaluate(expr);
@@ -218,7 +221,7 @@ public class ExpressionPreprocessorTest {
 
     @Test
     public void testGreaterThanOrEqualJoin() throws Exception {
-        ExpressionPreprocessor ep = new ExpressionPreprocessor();
+        ExpressionPreprocessor ep = new ExpressionPreprocessor(ctx);
         Expression expr = CCJSqlParserUtil.parseExpression("T1.B >= T2.D");
 
         ep.evaluate(expr);

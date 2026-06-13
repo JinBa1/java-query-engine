@@ -1,5 +1,6 @@
 package com.github.jinba1.blazedb.operator;
 
+import com.github.jinba1.blazedb.ErrorCode;
 import com.github.jinba1.blazedb.PlanContext;
 import com.github.jinba1.blazedb.QueryExecutionException;
 import com.github.jinba1.blazedb.Tuple;
@@ -60,6 +61,9 @@ public class LimitOperator extends Operator {
         try {
             truncated = child.getNextTuple() != null;
         } catch (QueryExecutionException e) {
+            if (e.code() == ErrorCode.INTERNAL) {
+                throw e; // engine bug — never mask it as truncation metadata
+            }
             // The capped result is already complete; rows past the cap are not part
             // of the answer, so neither budget exhaustion nor a bad row there may
             // fail the query. Either reads honestly as "result may be incomplete".

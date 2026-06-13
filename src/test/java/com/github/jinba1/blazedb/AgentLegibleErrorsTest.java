@@ -82,8 +82,8 @@ public class AgentLegibleErrorsTest {
         QueryExecutionException ex = assertPlanFails(
                 "SELECT * FROM Student, Course WHERE Student.nam = Course.cid");
         assertEquals(ErrorCode.UNKNOWN_COLUMN, ex.code());
-        assertTrue(ex.getMessage().contains("nam"), ex.getMessage());
-        assertTrue(ex.getMessage().contains("Student"), ex.getMessage());
+        // same single construction site as every other unknown-column path
+        assertTrue(ex.getMessage().contains("Column 'Student.nam' not found"), ex.getMessage());
         assertTrue(ex.getMessage().contains("Available"), ex.getMessage());
         assertTrue(ex.getMessage().contains("sid"), ex.getMessage());
     }
@@ -159,6 +159,32 @@ public class AgentLegibleErrorsTest {
         QueryExecutionException ex = assertExecutionFails(
                 "SELECT * FROM Student WHERE Student.sid = 1 OR Student.sid = 2");
         assertEquals(ErrorCode.UNSUPPORTED_SQL, ex.code());
+    }
+
+    @Test
+    public void selectArithmeticItemIsUnsupported() throws IOException {
+        QueryExecutionException ex = assertPlanFails("SELECT Student.sid * 2 FROM Student");
+        assertEquals(ErrorCode.UNSUPPORTED_SQL, ex.code());
+        assertTrue(ex.getMessage().contains("column references"), ex.getMessage());
+    }
+
+    @Test
+    public void orderByArithmeticItemIsUnsupported() throws IOException {
+        QueryExecutionException ex = assertPlanFails(
+                "SELECT * FROM Student ORDER BY Student.sid * 2");
+        assertEquals(ErrorCode.UNSUPPORTED_SQL, ex.code());
+        assertTrue(ex.getMessage().contains("ORDER BY"), ex.getMessage());
+    }
+
+    @Test
+    public void rowShapeChangedSinceCatalogInitIsDataError() throws IOException {
+        // Catalog inferred 4 columns at init; a row appended afterwards with the
+        // wrong width must fail as DATA_ERROR when the scan reaches it
+        Files.writeString(db.resolve("data").resolve("Student.csv"),
+                "3, 103", java.nio.file.StandardOpenOption.APPEND);
+        QueryExecutionException ex = assertExecutionFails("SELECT * FROM Student");
+        assertEquals(ErrorCode.DATA_ERROR, ex.code());
+        assertTrue(ex.getMessage().contains("expected 4 fields"), ex.getMessage());
     }
 
     // ---- type errors ----
