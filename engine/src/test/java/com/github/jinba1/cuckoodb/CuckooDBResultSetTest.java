@@ -155,6 +155,16 @@ class CuckooDBResultSetTest {
     }
 
     @Test
+    void resultSetCollectionsAreUnmodifiable() {
+        // The record is a value handed to the REST layer; callers must not be able to mutate
+        // rows or columns after the fact.
+        QueryResultSet rs = run("SELECT * FROM Student");
+        assertThrows(UnsupportedOperationException.class, () -> rs.rows().add(List.of()));
+        assertThrows(UnsupportedOperationException.class,
+                () -> rs.columns().add(new ColumnMeta("x", null, null)));
+    }
+
+    @Test
     void limitZeroIsEmptyButTruncated() {
         // The one state where rows.isEmpty() coincides with truncated=true: LIMIT 0 over a
         // non-empty source. Names survive, every type is null, and the truncation hint is set.

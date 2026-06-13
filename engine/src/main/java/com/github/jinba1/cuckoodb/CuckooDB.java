@@ -179,7 +179,11 @@ public class CuckooDB {
 		boolean truncated = wasTruncated(root);
 		String hint = truncated ? QueryResult.truncated(rows.size()).hint() : null;
 		List<ColumnMeta> columns = buildColumns(root.getContext(), schemaId, names, rows);
-		return new QueryResultSet(columns, rows, truncated, hint);
+		// The result is a value handed to library/REST callers; the outer lists are
+		// unmodifiable so a consumer cannot mutate the result after the fact (each inner
+		// row is already immutable via List.copyOf in the drain sink).
+		return new QueryResultSet(Collections.unmodifiableList(columns),
+				Collections.unmodifiableList(rows), truncated, hint);
 	}
 
 	/**

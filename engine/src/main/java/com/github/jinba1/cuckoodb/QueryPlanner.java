@@ -111,6 +111,13 @@ public class QueryPlanner {
      * @throws QueryExecutionException with an {@link ErrorCode} the caller can act on
      */
     public static PlannedQuery planSql(String sql, QueryConfig config) {
+        if (sql == null || sql.isBlank()) {
+            // Keep the "every failure is a classified QueryExecutionException" invariant:
+            // CCJSqlParserUtil.parse(null) throws a bare NPE that would otherwise escape as
+            // an unclassified RuntimeException (the server would map it to 500, not 400).
+            throw new QueryExecutionException(ErrorCode.PARSE_ERROR,
+                    "SQL text must not be null or blank");
+        }
         Statement statement;
         try {
             statement = CCJSqlParserUtil.parse(sql);

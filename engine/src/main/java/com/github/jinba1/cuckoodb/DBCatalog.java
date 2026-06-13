@@ -133,6 +133,10 @@ public class DBCatalog {
      * Parses one CSV into table metadata: column names from the header row, types inferred
      * from the data rows. Pure (no map writes) so both directory load and {@link #registerTable}
      * share identical parse-and-infer rules. The returned schema and types are unmodifiable.
+     * <p>Type inference starts every column as INT and demotes to STRING on the first
+     * non-integer field, so a <em>header-only</em> CSV (no data rows) infers every column as
+     * INT — there is no evidence to refute INT. REST callers uploading a schema-only file get
+     * an all-INT table until rows arrive.
      */
     private static TableMeta parseTable(String tableName, Path csv) throws IOException {
         CSVFormat format = CSVFormat.RFC4180.builder()

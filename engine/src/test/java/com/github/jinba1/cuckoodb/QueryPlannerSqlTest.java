@@ -100,6 +100,22 @@ class QueryPlannerSqlTest {
     }
 
     @Test
+    void nullSqlThrowsParseErrorNotNpe() {
+        // Every planSql failure must be a classified QueryExecutionException, never a raw NPE
+        // that the server would map to 500 instead of 400.
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.planSql(null, QueryConfig.defaults()));
+        assertEquals(ErrorCode.PARSE_ERROR, e.code());
+    }
+
+    @Test
+    void blankSqlThrowsParseError() {
+        QueryExecutionException e = assertThrows(QueryExecutionException.class,
+                () -> QueryPlanner.planSql("   \n  ", QueryConfig.defaults()));
+        assertEquals(ErrorCode.PARSE_ERROR, e.code());
+    }
+
+    @Test
     void multipleStatementsAreRejected() {
         // Read-only-by-construction: a second statement must never sneak through. JSqlParser's
         // single-statement parse rejects it as a syntax error.
