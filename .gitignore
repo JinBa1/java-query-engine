@@ -8,10 +8,11 @@ target/
 .DS_Store
 *.class
 .omo/
-src/test/resources/test_integration_output/
-src/test/resources/test_sample_output/
-src/test/resources/test_integration_queries/
+engine/src/test/resources/test_integration_output/
+engine/src/test/resources/test_sample_output/
+engine/src/test/resources/test_integration_queries/
 
 # local working files
 dev/
 CLAUDE.md
+REPORT_*.md

@@ -6,101 +6,36 @@
 
 ## OVERVIEW
 
-CuckooDB (artifactId: `cuckoodb`) is an in-memory relational query engine built on the Volcano/iterator model. It parses SQL via JSqlParser, builds an operator tree, and executes tuple-at-a-time over CSV data. The project targets Java 17 and uses JUnit Jupiter 5.10.2, JSqlParser 4.7, and JaCoCo 0.8.12.
+CuckooDB (engine module artifactId: `cuckoodb-engine`; parent: `cuckoodb-parent`) is an in-memory relational query engine built on the Volcano/iterator model. It parses SQL via JSqlParser, builds an operator tree, and executes tuple-at-a-time over CSV data. The project targets Java 17 and uses JUnit Jupiter 5.10.2, JSqlParser 4.7, and JaCoCo 0.8.12.
 
 ## STRUCTURE
 
 ```
-java-query-engine/
-├── pom.xml                          # Java 17, JSqlParser 4.7, commons-csv 1.14.1, JUnit 5.10.2, JMH 1.37 (test-scope), exec-maven-plugin
-├── .gitignore                       # ignores target/, *.class, .iml, .DS_Store, test output dirs
-├── .github/
-│   └── workflows/
-│       └── ci.yml                   # push/PR to main: build + test + Codecov upload
-├── samples/
-│   ├── db/
-│   │   └── data/                    # CSV data files (header row + data rows)
-│   ├── input/
-│   │   └── query[1-20].sql          # 20 sample queries
-│   └── expected_output/
-│       └── query[1-20].csv          # expected results
-└── src/
-    ├── main/java/com/github/jinba1/cuckoodb/   # 35 core files
-    │   ├── CuckooDB.java
-    │   ├── QueryPlanner.java
-    │   ├── QueryPlanOptimizer.java
-    │   ├── QueryBudget.java
-    │   ├── QueryBudgetExceededException.java
-    │   ├── PlannedQuery.java
-    │   ├── PlanPrinter.java
-    │   ├── DBCatalog.java
-    │   ├── ExpressionEvaluator.java
-    │   ├── ExpressionPreprocessor.java
-    │   ├── ConditionSplitter.java
-    │   ├── ColumnExtractor.java
-    │   ├── ColumnIdentity.java
-    │   ├── Tuple.java
-    │   ├── TupleComparator.java
-    │   ├── SchemaTransformationType.java
-    │   ├── Constants.java
-    │   ├── SampleQueryRunner.java
-    │   ├── Value.java
-    │   ├── IntValue.java
-    │   ├── StringValue.java
-    │   ├── ColumnType.java
-    │   ├── QueryExecutionException.java
-    │   ├── AggregateFunction.java
-    │   ├── AggregateCall.java
-    │   └── operator/                # 11 operator files (1 abstract base + 10 concrete)
-    │       ├── Operator.java
-    │       ├── ScanOperator.java
-    │       ├── SelectOperator.java
-    │       ├── ProjectOperator.java
-    │       ├── JoinOperator.java
-    │       ├── HashJoinOperator.java
-    │       ├── SortOperator.java
-    │       ├── AggregateOperator.java
-    │       ├── LimitOperator.java
-    │       ├── Accumulator.java
-    │       └── DuplicateEliminationOperator.java
-    └── test/java/com/github/jinba1/cuckoodb/   # 33 test files (339 tests)
-        ├── CuckooDBTest.java
-        ├── ColumnExtractorTest.java
-        ├── ConditionSplitterTest.java
-        ├── DBCatalogTest.java
-        ├── DuplicateEliminationOperatorTest.java
-        ├── ExplainEndToEndTest.java
-        ├── ExpressionEvaluatorTest.java
-        ├── ExpressionPreprocessorTest.java
-        ├── HashJoinEndToEndTest.java
-        ├── JoinOperatorTest.java
-        ├── PlanPrinterTest.java
-        ├── ProjectOperatorTest.java
-        ├── QueryBudgetEnforcementTest.java
-        ├── QueryBudgetTest.java
-        ├── QueryOptimizationBenchmarkTest.java
-        ├── QueryPlanOptimizerTest.java
-        ├── ScanOperatorTest.java
-        ├── SelectOperatorTest.java
-        ├── SortOperatorTest.java
-        ├── AggregateFunctionTest.java
-        ├── AggregateOperatorTest.java
-        ├── AggregateLimitEndToEndTest.java
-        ├── TupleComparatorTest.java
-        ├── TupleTest.java
-        ├── TestTuples.java
-        ├── StringEndToEndTest.java
-        ├── ValueTest.java
-        ├── operator/AccumulatorTest.java
-        ├── operator/BudgetAttachmentTest.java
-        ├── operator/CachedOperator.java          # test utility (not a test class)
-        ├── operator/CachedOperatorTest.java
-        ├── operator/HashJoinOperatorTest.java
-        ├── operator/LimitOperatorTest.java
-        └── bench/                               # JMH benchmarks (compiled in CI, never run in CI)
-            ├── EndToEndJoinBenchmark.java
-            └── JoinAlgorithmBenchmark.java
+cuckoodb-parent/                       # repo root (git slug: java-query-engine)
+├── pom.xml                            # Parent POM: packaging=pom, modules engine+server, dependency/plugin management (Java 17)
+├── .gitignore                         # ignores target/, *.class, .iml, IDE metadata, engine/ test-output dirs
+├── .github/workflows/ci.yml           # push/PR to main: ./mvnw clean compile + test + Codecov (engine/target/site/jacoco/jacoco.xml)
+├── mvnw / mvnw.cmd / .mvn/            # Maven Wrapper (shared, at root)
+├── engine/                            # cuckoodb-engine — pure query engine, ZERO Spring deps
+│   ├── pom.xml                        # JSqlParser 4.7, commons-csv 1.14.1, JUnit 5.10.2, JMH 1.37 (test); exec + assembly + jacoco
+│   ├── samples/                       # 20-query golden dataset (moved here from repo root in the module split)
+│   │   ├── db/data/                   # CSV data files (header row + data rows)
+│   │   ├── input/query[1-20].sql      # 20 sample queries
+│   │   └── expected_output/query[1-20].csv   # expected results
+│   └── src/
+│       ├── main/java/com/github/jinba1/cuckoodb/   # 35 core files (CuckooDB entry, planner, optimizer, catalog, budgets, Value/Tuple)
+│       │   └── operator/                           # 11 Volcano operators (base + Scan/Select/Project/Join/HashJoin/Sort/Aggregate/Limit/DuplicateElimination + Accumulator)
+│       └── test/java/com/github/jinba1/cuckoodb/   # 33 test files (339 tests)
+│           ├── CuckooDBTest.java                   # incl. testAllSampleQueries — the 20-sample byte-identical gate
+│           ├── ConcurrentQueryExecutionTest.java, DBCatalogTest.java, ...   # planner / optimizer / budget / EXPLAIN / end-to-end
+│           ├── operator/                           # operator-level tests + CachedOperator test utility
+│           └── bench/                              # JMH benchmarks (compiled in CI, never run there): EndToEndJoinBenchmark, JoinAlgorithmBenchmark
+└── server/                            # cuckoodb-server — REST gateway skeleton; Spring Boot REST gateway planned
+    ├── pom.xml                        # depends on cuckoodb-engine (${project.version}); NO Spring yet
+    └── src/main/java/com/github/jinba1/cuckoodb/server/ServerPlaceholder.java   # compile-links an engine type to prove reactor wiring
 ```
+
+Per-file responsibilities are in the WHERE TO LOOK table below.
 
 ## WHERE TO LOOK
 
@@ -158,37 +93,41 @@ java-query-engine/
 # Run the full test suite (339 tests)
 ./mvnw test
 
-# Build the fat JAR explicitly
-./mvnw clean compile assembly:single
+# Build the fat JAR (engine module; assembly is bound to the package phase)
+./mvnw -pl engine -DskipTests clean package
 
-# Build the fat JAR via the package phase (assembly plugin is bound to package phase — also works)
+# Or build the whole reactor (engine fat JAR + server skeleton), running tests
 ./mvnw clean package
 
 # The fat JAR is always produced at:
-# target/cuckoodb-1.0.0-jar-with-dependencies.jar
+# engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar
 
 # Run a query (example: query1.sql)
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.cuckoodb.CuckooDB \
-  samples/db \
-  samples/input/query1.sql \
+  engine/samples/db \
+  engine/samples/input/query1.sql \
   output.csv
 
 # Run a query with budget flags (both optional, independent)
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.cuckoodb.CuckooDB \
-  samples/db \
-  samples/input/query1.sql \
+  engine/samples/db \
+  engine/samples/input/query1.sql \
   output.csv \
   --max-tuples=50000 \
   --timeout-ms=10000
 
-# Run all 20 sample queries via the automated runner
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
-  com.github.jinba1.cuckoodb.SampleQueryRunner
+# Run all 20 sample queries via the automated runner.
+# SampleQueryRunner.main resolves samples/ against the CWD, so it MUST run with
+# CWD = engine/. exec:java keeps CWD at the reactor root (would not find samples/);
+# exec:exec forks with workingDirectory = engine/ basedir, so use this form
+# (or: cd engine && java -cp target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar com.github.jinba1.cuckoodb.SampleQueryRunner).
+./mvnw -pl engine -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
+  "-Dexec.args=-cp %classpath com.github.jinba1.cuckoodb.SampleQueryRunner"
 
 # Run the JMH benchmark suite (exec:java breaks JMH forking; use this exact form)
-./mvnw -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
+./mvnw -pl engine -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
   "-Dexec.args=-cp %classpath org.openjdk.jmh.Main .*Benchmark"
 ```
 
@@ -209,8 +148,8 @@ The README displays CI, Coverage (Codecov), and Dependencies badges at the top.
 - The benchmarking/tuple-counter infrastructure was introduced in commit `ef92ca1` ("feat: add query optimization benchmark suite with tuple counters"): `Operator` gained `protected long tupleCounter` with `getTupleCount()` / `resetTupleCount()`, and `QueryOptimizationBenchmarkTest` was added as one of the test files.
 - Budget enforcement reuses the tuple-counter slot: `countTuple()` (called per emitted tuple) increments `tupleCounter` and delegates to `QueryBudget.charge()` when a budget is attached. This means every operator in the tree counts — total-work semantics.
 - `SampleQueryRunner.java` provides an automated 20-query diff runner: it runs all queries in `samples/input/` against `samples/db/` and diffs each result against `samples/expected_output/`, reporting pass/fail. There is no need to diff manually.
-- A `.gitignore` exists at the repository root. It ignores `target/`, `*.iml`, `.DS_Store`, `*.class`, `.omo/`, and the test-resource output directories (`src/test/resources/test_integration_output/`, `src/test/resources/test_sample_output/`, `src/test/resources/test_integration_queries/`).
+- A `.gitignore` exists at the repository root. It ignores `target/`, `*.iml`, `.DS_Store`, `*.class`, `.omo/`, and the engine-module test-resource output directories (`engine/src/test/resources/test_integration_output/`, `engine/src/test/resources/test_sample_output/`, `engine/src/test/resources/test_integration_queries/`).
 - Query output includes a header row (column names, plain commas) followed by data rows (plain comma-separated, LF). Output is RFC 4180 and is round-trippable as input to this engine.
 - EXPLAIN queries write the two-section plan text to the output file and do not execute the query. The plan root returned by `QueryPlanner.planQuery` for EXPLAIN is a no-op; `CuckooDB.run` short-circuits before operator iteration when `explainText` is non-null.
 - Hash join is the default for equi-joins (`Constants.useHashJoin = true`). Set it to `false` in tests (via `@BeforeEach`/`@AfterEach`) to exercise the nested-loop path. `HashJoinOperator.hasEquiConjunct(Expression)` is the planner's check for at least one cross-side column=column equality in the condition.
-- The JMH 1.37 benchmark suite lives in `src/test/java/com/github/jinba1/cuckoodb/bench/`. It is compiled as part of `test-compile` in CI but never executed there. `CachedOperator` (in `src/test/java/.../operator/`) is a test utility operator that replays a fixed in-memory tuple list — used by `JoinAlgorithmBenchmark` to isolate join algorithm cost from CSV I/O. The `bench/` package classes are JMH benchmarks and do not contain JUnit tests.
+- The JMH 1.37 benchmark suite lives in `engine/src/test/java/com/github/jinba1/cuckoodb/bench/`. It is compiled as part of `test-compile` in CI but never executed there. `CachedOperator` (in `engine/src/test/java/.../operator/`) is a test utility operator that replays a fixed in-memory tuple list — used by `JoinAlgorithmBenchmark` to isolate join algorithm cost from CSV I/O. The `bench/` package classes are JMH benchmarks and do not contain JUnit tests.

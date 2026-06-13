@@ -83,14 +83,14 @@ The focus is on demonstrating query planning, optimisation, and the Volcano iter
 git clone https://github.com/JinBa1/java-query-engine.git
 cd java-query-engine
 
-# Build fat JAR
-./mvnw clean compile assembly:single
+# Build fat JAR (engine module)
+./mvnw -pl engine -DskipTests clean package
 ```
 
 **Run a query:**
 
 ```bash
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.cuckoodb.CuckooDB \
   database_dir input_file output_file [--max-tuples=N] [--timeout-ms=N]
 ```
@@ -159,10 +159,10 @@ The engine supports two join algorithms; the planner selects between them automa
 
 ### Benchmarks
 
-Performance was measured with a JMH 1.37 benchmark suite in the `bench/` package (`src/test/java/com/github/jinba1/cuckoodb/bench/`). The suite is compiled in CI but never run there; run it locally with:
+Performance was measured with a JMH 1.37 benchmark suite in the `bench/` package (`engine/src/test/java/com/github/jinba1/cuckoodb/bench/`). The suite is compiled in CI but never run there; run it locally with:
 
 ```bash
-./mvnw -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
+./mvnw -pl engine -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
   "-Dexec.args=-cp %classpath org.openjdk.jmh.Main .*Benchmark"
 ```
 
@@ -187,7 +187,7 @@ Benchmarks are compiled in CI but never executed there.
 
 ## Demo
 
-**Input table** (`samples/db/data/Student.csv`):
+**Input table** (`engine/samples/db/data/Student.csv`):
 
 ```
 A, B, C, D
@@ -199,7 +199,7 @@ A, B, C, D
 6, 300, 400, 11
 ```
 
-**Query** (`samples/input/query4.sql`):
+**Query** (`engine/samples/input/query4.sql`):
 
 ```sql
 SELECT * FROM Student WHERE Student.A < 3;
@@ -208,17 +208,17 @@ SELECT * FROM Student WHERE Student.A < 3;
 **Command:**
 
 ```bash
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.cuckoodb.CuckooDB \
-  samples/db samples/input/query4.sql output.csv
+  engine/samples/db engine/samples/input/query4.sql output.csv
 ```
 
 To limit resource usage, add optional budget flags:
 
 ```bash
-java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
   com.github.jinba1.cuckoodb.CuckooDB \
-  samples/db samples/input/query4.sql output.csv --max-tuples=10000 --timeout-ms=5000
+  engine/samples/db engine/samples/input/query4.sql output.csv --max-tuples=10000 --timeout-ms=5000
 ```
 
 **Output** (`output.csv`):
@@ -231,15 +231,24 @@ a,b,c,d
 
 ## Running Examples
 
-The `samples/` directory ships with 20 queries and a small dataset (Student, Course, Enrolled, Staff tables). Expected output lives in `samples/expected_output/`.
+The `engine/samples/` directory ships with 20 queries and a small dataset (Student, Course, Enrolled, Staff tables). Expected output lives in `engine/samples/expected_output/`.
+
+Run all 20 through the bundled runner, which diffs each result against the expected output and reports pass/fail. It is launched via `exec:exec` (not `exec:java`) so it runs with the engine module as the working directory — `exec:java` would keep the working directory at the reactor root and fail to find `samples/`:
+
+```bash
+./mvnw -pl engine -q test-compile exec:exec -Dexec.executable=java -Dexec.classpathScope=test \
+  "-Dexec.args=-cp %classpath com.github.jinba1.cuckoodb.SampleQueryRunner"
+```
+
+Or run each query through the CLI and diff manually:
 
 ```bash
 # Run all sample queries and diff against expected output
 for i in $(seq 1 20); do
-  java -cp target/cuckoodb-1.0.0-jar-with-dependencies.jar \
+  java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
     com.github.jinba1.cuckoodb.CuckooDB \
-    samples/db "samples/input/query${i}.sql" "/tmp/out${i}.csv"
-  diff "samples/expected_output/query${i}.csv" "/tmp/out${i}.csv" && echo "query${i}: OK"
+    engine/samples/db "engine/samples/input/query${i}.sql" "/tmp/out${i}.csv"
+  diff "engine/samples/expected_output/query${i}.csv" "/tmp/out${i}.csv" && echo "query${i}: OK"
 done
 ```
 
@@ -254,15 +263,20 @@ The test suite covers individual operators, the query planner, the optimiser, ex
 ## Project Structure
 
 ```
-├── src/main/java/com/github/jinba1/cuckoodb/   # Core engine (35 files)
-│   └── operator/                                # Volcano operators (11 files, incl. HashJoinOperator)
-├── src/test/java/com/github/jinba1/cuckoodb/    # JUnit 5 tests (339 tests across 33 files)
-├── samples/
-│   ├── db/data/                                 # CSV data files (header row + data rows)
-│   ├── input/query[1-20].sql                    # Sample queries
-│   └── expected_output/query[1-20].csv          # Expected results
-├── pom.xml                                      # Maven config (Java 17, JSqlParser 4.7, commons-csv 1.14.1, JMH 1.37 test-scope)
-├── mvnw / mvnw.cmd                              # Maven Wrapper
+├── pom.xml                                          # Parent POM (aggregator: engine + server; Java 17, dep/plugin management)
+├── engine/                                          # Pure query engine — zero Spring dependencies
+│   ├── pom.xml                                      # cuckoodb-engine (JSqlParser 4.7, commons-csv 1.14.1, JMH 1.37 test-scope)
+│   ├── src/main/java/com/github/jinba1/cuckoodb/    # Core engine (35 files)
+│   │   └── operator/                                # Volcano operators (11 files, incl. HashJoinOperator)
+│   ├── src/test/java/com/github/jinba1/cuckoodb/    # JUnit 5 tests (339 tests across 33 files)
+│   └── samples/
+│       ├── db/data/                                 # CSV data files (header row + data rows)
+│       ├── input/query[1-20].sql                    # Sample queries
+│       └── expected_output/query[1-20].csv          # Expected results
+├── server/                                          # REST gateway skeleton — Spring Boot REST gateway planned
+│   ├── pom.xml                                      # cuckoodb-server (depends on cuckoodb-engine; no Spring yet)
+│   └── src/main/java/com/github/jinba1/cuckoodb/server/
+├── mvnw / mvnw.cmd                                  # Maven Wrapper
 └── LICENSE
 ```
 
