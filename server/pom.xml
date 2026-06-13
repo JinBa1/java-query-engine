@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.github.jinba1</groupId>
+    <artifactId>cuckoodb-parent</artifactId>
+    <version>1.0.0</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>cuckoodb-server</artifactId>
+  <packaging>jar</packaging>
+
+  <name>cuckooDB Server</name>
+  <!--
+    Skeleton only. Spring Boot and the REST gateway are added in a later change.
+    The single dependency on cuckoodb-engine proves the reactor wiring and the
+    server -> engine direction; no Spring / web dependency enters yet.
+  -->
+
+  <dependencies>
+    <dependency>
+      <groupId>com.github.jinba1</groupId>
+      <artifactId>cuckoodb-engine</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+</project>

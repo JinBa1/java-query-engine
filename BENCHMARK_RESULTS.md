@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document contains quantifiable performance results from the query optimization benchmark suite added to BlazeDB. The benchmarks measure tuple processing reduction achieved by rule-based query optimizations.
+This document contains quantifiable performance results from the query optimization benchmark suite added to CuckooDB. The benchmarks measure tuple processing reduction achieved by rule-based query optimizations.
 
 ## Benchmark Methodology
 
