@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -222,14 +223,24 @@ public class CuckooDB {
 		String[] qualified = new String[width];
 		Map<String, Integer> schema = ctx.getSchema(schemaId);
 		if (schema != null) {
-			for (Map.Entry<String, Integer> entry : schema.entrySet()) {
-				String key = entry.getKey();
-				int idx = entry.getValue();
+			// Mirror getOrderedColumnNames' deterministic rule — sorted keys, first non-null
+			// wins per index — so `name` and `qualifiedName` are chosen from a single key
+			// choice and never disagree run-to-run. Skip internal intermediate-schema keys
+			// (temp_<hex>.col) outright: a join over a pushed-down source registers BOTH a
+			// base-qualified key (Enrolled.a) and a temp_ key at the same index, and the
+			// temp_ id is not a real origin (and is plan/JVM-unstable).
+			List<String> keys = new ArrayList<>(schema.keySet());
+			Collections.sort(keys);
+			for (String key : keys) {
+				int idx = schema.get(key);
+				if (idx < 0 || idx >= width || qualified[idx] != null
+						|| key.startsWith(Constants.INTERMEDIATE_SCHEMA_PREFIX)) {
+					continue;
+				}
 				// A dotted, non-aggregate key (e.g. "Student.a") is the column's qualified
-				// origin. Aggregate keys like "sum(student.c)" also contain '.', but are not
-				// origins, so the '(' check excludes them. Lowercased to match the bare
-				// `name` and the engine's lowercase-header convention (-> "student.a").
-				if (idx >= 0 && idx < width && key.indexOf('.') >= 0 && key.indexOf('(') < 0) {
+				// origin. Aggregate keys like "sum(student.c)" also contain '.', so the '('
+				// check excludes them. Lowercased to match the bare name (-> "student.a").
+				if (key.indexOf('.') >= 0 && key.indexOf('(') < 0) {
 					qualified[idx] = key.toLowerCase();
 				}
 			}

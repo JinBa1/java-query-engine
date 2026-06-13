@@ -372,4 +372,48 @@ class DBCatalogTest {
             pool.shutdownNow();
         }
     }
+
+    /**
+     * The 409 contract PR 4b's upload path depends on: when N threads register the SAME name
+     * at once, exactly one putIfAbsent wins (returns true), the rest report false, and the
+     * winner's meta is installed intact — never a torn blend of two registrations.
+     */
+    @Test
+    public void registerTableHasExactlyOneWinnerAmongConcurrentSameNameRegisters() throws Exception {
+        DBCatalog.resetDBCatalog();
+        DBCatalog catalog = DBCatalog.getInstance();
+
+        int k = 16;
+        List<Path> csvs = new java.util.ArrayList<>();
+        for (int i = 0; i < k; i++) {
+            Path p = tempDb.resolve("w" + i + ".csv");
+            Files.writeString(p, "a,b\n" + i + "," + i + "\n");
+            csvs.add(p);
+        }
+
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(k);
+        try {
+            var barrier = new java.util.concurrent.CyclicBarrier(k);
+            var winners = new java.util.concurrent.atomic.AtomicInteger();
+            var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < k; i++) {
+                Path csv = csvs.get(i);
+                futures.add(pool.submit(() -> {
+                    barrier.await();
+                    if (catalog.registerTable("Solo", csv)) {
+                        winners.incrementAndGet();
+                    }
+                    return null;
+                }));
+            }
+            for (var f : futures) f.get();
+
+            assertEquals(1, winners.get(), "exactly one concurrent register may win");
+            assertTrue(catalog.tableExists("Solo"));
+            assertTrue(csvs.contains(catalog.getDBLocation("Solo")),
+                    "the installed meta is one registration's, intact (not a torn blend)");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
 }

@@ -129,4 +129,62 @@ class CuckooDBResultSetTest {
         assertEquals(fileDataLines, rsDataLines,
                 "the two drain paths must produce identical row data");
     }
+
+    /**
+     * Regression for the review's HIGH finding: a one-sided WHERE filter makes the optimizer
+     * push a selection under the join, so the join source is an intermediate (temp_) schema
+     * that carries both a base-qualified key (enrolled.a) and an internal temp_<hex>.a key at
+     * the same index. qualifiedName must report the real origin, never the internal id.
+     */
+    @Test
+    void qualifiedNameNeverLeaksInternalSchemaIdsAcrossPushdownJoin() {
+        QueryResultSet rs = run(
+                "SELECT * FROM Student, Enrolled WHERE Student.A = Enrolled.A AND Enrolled.H > 0");
+
+        List<String> names = rs.columns().stream().map(ColumnMeta::name).toList();
+        assertEquals(List.of("a", "b", "c", "d", "a", "e", "h"), names);
+
+        List<String> quals = rs.columns().stream().map(ColumnMeta::qualifiedName).toList();
+        for (String q : quals) {
+            assertFalse(q != null && q.startsWith("temp_"),
+                    "qualifiedName must be a real table origin, not an internal id: " + quals);
+        }
+        assertEquals("student.a", rs.columns().get(0).qualifiedName());
+        assertEquals("enrolled.a", rs.columns().get(4).qualifiedName(),
+                "the pushed-down side still resolves to its base table origin");
+    }
+
+    @Test
+    void limitZeroIsEmptyButTruncated() {
+        // The one state where rows.isEmpty() coincides with truncated=true: LIMIT 0 over a
+        // non-empty source. Names survive, every type is null, and the truncation hint is set.
+        QueryResultSet rs = run("SELECT * FROM Student LIMIT 0");
+
+        assertTrue(rs.rows().isEmpty());
+        assertTrue(rs.truncated());
+        assertEquals(QueryResult.truncated(0).hint(), rs.hint());
+        List<String> names = rs.columns().stream().map(ColumnMeta::name).toList();
+        assertEquals(List.of("a", "b", "c", "d"), names);
+        for (ColumnMeta col : rs.columns()) {
+            assertNull(col.type(), "no row means no inferable type");
+        }
+    }
+
+    @Test
+    void aggregateColumnsHaveNullQualifiedNameAndInferredTypes() {
+        // SUM(Typed.n) / MIN(Typed.s) keys contain a '.', so they pin the '(' exclusion that
+        // keeps aggregate columns out of qualifiedName; a no-group aggregate emits exactly one
+        // row, so first-row inference still types every column.
+        QueryResultSet rs = run("SELECT COUNT(*), SUM(Typed.n), MIN(Typed.s) FROM Typed");
+
+        assertEquals(1, rs.rows().size(), "a no-group aggregate emits exactly one row");
+        List<String> names = rs.columns().stream().map(ColumnMeta::name).toList();
+        assertEquals(List.of("count(*)", "sum(typed.n)", "min(typed.s)"), names);
+        for (ColumnMeta col : rs.columns()) {
+            assertNull(col.qualifiedName(), "aggregate columns have no dotted origin: " + col.name());
+        }
+        assertEquals(ColumnType.INT, rs.columns().get(0).type(), "count(*) is INT");
+        assertEquals(ColumnType.INT, rs.columns().get(1).type(), "sum over int is INT");
+        assertEquals(ColumnType.STRING, rs.columns().get(2).type(), "min over string is STRING");
+    }
 }
