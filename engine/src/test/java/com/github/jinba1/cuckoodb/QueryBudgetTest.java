@@ -64,6 +64,32 @@ public class QueryBudgetTest {
     }
 
     @Test
+    public void tupleBreachReportsKindTuples() {
+        // The REST layer maps a TUPLES breach to 429 and a TIME breach to 504, so the kind
+        // must be programmatically distinguishable, not parsed from the message text.
+        QueryBudget budget = new QueryBudget(0L, null);
+        QueryBudgetExceededException ex =
+                assertThrows(QueryBudgetExceededException.class, budget::charge);
+        assertEquals(BudgetKind.TUPLES, ex.kind());
+    }
+
+    @Test
+    public void timeBreachInChargeReportsKindTime() {
+        QueryBudget budget = new QueryBudget(null, 0L);
+        QueryBudgetExceededException ex =
+                assertThrows(QueryBudgetExceededException.class, budget::charge);
+        assertEquals(BudgetKind.TIME, ex.kind());
+    }
+
+    @Test
+    public void timeBreachInCheckDeadlineReportsKindTime() {
+        QueryBudget budget = new QueryBudget(null, 0L);
+        QueryBudgetExceededException ex =
+                assertThrows(QueryBudgetExceededException.class, budget::checkDeadline);
+        assertEquals(BudgetKind.TIME, ex.kind());
+    }
+
+    @Test
     public void checkDeadlineWithZeroTimeoutTripsImmediately() {
         QueryBudget budget = new QueryBudget(null, 0L);
         QueryBudgetExceededException ex =

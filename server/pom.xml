@@ -16,10 +16,28 @@
 
   <name>cuckooDB Server</name>
   <!--
-    Skeleton only. Spring Boot and the REST gateway are added in a later change.
-    The single dependency on cuckoodb-engine proves the reactor wiring and the
-    server -> engine direction; no Spring / web dependency enters yet.
+    Spring Boot REST gateway over the engine. Spring enters here ONLY: the parent POM and the
+    engine module stay Spring-free. We import the spring-boot-dependencies BOM rather than
+    reparenting to spring-boot-starter-parent, so the module keeps cuckoodb-parent and the
+    engine/server seam stays structurally enforced.
   -->
+
+  <properties>
+    <spring-boot.version>3.4.1</spring-boot.version>
+    <springdoc.version>2.7.0</springdoc.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>
@@ -27,5 +45,48 @@
       <artifactId>cuckoodb-engine</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+      <version>${springdoc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <!--
+            Spring MVC needs parameter names at runtime (e.g. @PathVariable {name} -> method
+            arg). spring-boot-starter-parent adds this automatically; since we deliberately do
+            NOT reparent (keeping cuckoodb-parent), we enable it here ourselves.
+          -->
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
