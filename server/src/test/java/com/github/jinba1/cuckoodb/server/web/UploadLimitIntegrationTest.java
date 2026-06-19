@@ -4,7 +4,7 @@ import static com.github.jinba1.cuckoodb.server.TestFiles.deleteRecursively;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,7 +14,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -29,6 +30,7 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@AutoConfigureTestRestTemplate
 class UploadLimitIntegrationTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -64,9 +66,9 @@ class UploadLimitIntegrationTest {
 
         ResponseEntity<String> overCap = csv("/tables/Second", "x\n1\n");
         assertEquals(507, overCap.getStatusCode().value(), overCap.getBody());
-        assertEquals("TABLE_LIMIT", JSON.readTree(overCap.getBody()).get("errorCode").asText());
+        assertEquals("TABLE_LIMIT", JSON.readTree(overCap.getBody()).get("errorCode").asString());
         // No eviction: 507 is not retryable, so it carries no Retry-After.
-        assertFalse(overCap.getHeaders().containsKey("Retry-After"));
+        assertFalse(overCap.getHeaders().containsHeader("Retry-After"));
     }
 
     private ResponseEntity<String> csv(String path, String body) {

@@ -30,9 +30,9 @@ cuckoodb-parent/                       # repo root (git slug: java-query-engine)
 │           ├── ConcurrentQueryExecutionTest.java, DBCatalogTest.java, ...   # planner / optimizer / budget / EXPLAIN / end-to-end
 │           ├── operator/                           # operator-level tests + CachedOperator test utility
 │           └── bench/                              # JMH benchmarks (compiled in CI, never run there): EndToEndJoinBenchmark, JoinAlgorithmBenchmark
-└── server/                            # cuckoodb-server — REST gateway skeleton; Spring Boot REST gateway planned
-    ├── pom.xml                        # depends on cuckoodb-engine (${project.version}); NO Spring yet
-    └── src/main/java/com/github/jinba1/cuckoodb/server/ServerPlaceholder.java   # compile-links an engine type to prove reactor wiring
+└── server/                            # cuckoodb-server — Spring Boot 4 REST gateway over the engine
+    ├── pom.xml                        # depends on cuckoodb-engine; Spring Boot 4.0.7 (web MVC), springdoc/OpenAPI
+    └── src/main/java/com/github/jinba1/cuckoodb/server/   # web/ controllers + GlobalExceptionHandler, query/ QueryService+budget+concurrency, catalog/ CatalogFacade, audit/ sink, config/ (52 server tests)
 ```
 
 Per-file responsibilities are in the WHERE TO LOOK table below.
