@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -20,7 +21,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Translates every failure into the uniform {@code {errorCode, message}} body with the right
@@ -128,8 +131,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleHttpMediaTypeNotSupported(
             HttpMediaTypeNotSupportedException ex, HttpHeaders headers,
             HttpStatusCode status, WebRequest request) {
-        return new ResponseEntity<>(ErrorResponse.of("UNSUPPORTED_MEDIA_TYPE",
-                "Unsupported Content-Type; this endpoint expects text/csv."),
+        // This advice is global, so the hint must name THIS endpoint's accepted types (text/csv
+        // for upload, application/json for /queries) rather than a hardcoded guess.
+        List<MediaType> supported = ex.getSupportedMediaTypes();
+        String message = supported.isEmpty()
+                ? "Unsupported Content-Type for this endpoint."
+                : "Unsupported Content-Type; this endpoint expects "
+                        + supported.stream().map(MediaType::toString).collect(Collectors.joining(", "))
+                        + ".";
+        return new ResponseEntity<>(ErrorResponse.of("UNSUPPORTED_MEDIA_TYPE", message),
                 HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     }
 

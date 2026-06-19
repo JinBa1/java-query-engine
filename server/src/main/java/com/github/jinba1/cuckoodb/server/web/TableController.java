@@ -1,5 +1,6 @@
 package com.github.jinba1.cuckoodb.server.web;
 
+import com.github.jinba1.cuckoodb.CsvFormats;
 import com.github.jinba1.cuckoodb.QueryExecutionException;
 import com.github.jinba1.cuckoodb.server.catalog.CatalogFacade;
 import com.github.jinba1.cuckoodb.server.config.CuckooDbProperties;
@@ -17,9 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.apache.commons.csv.CSVParser;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -27,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * Table catalog endpoints: list tables, describe a table's static typed schema, and (opt-in)
@@ -61,10 +64,8 @@ public class TableController {
     @GetMapping("/{name}")
     public TableSchemaResponse describe(@PathVariable String name) {
         validateName(name);
-        List<CatalogFacade.TableColumn> columns = catalog.columnsOf(name);
-        if (columns == null) {
-            throw new TableNotFoundException(name);
-        }
+        List<CatalogFacade.TableColumn> columns = catalog.columnsOf(name)
+                .orElseThrow(() -> new TableNotFoundException(name));
         return new TableSchemaResponse(name, toDto(columns));
     }
 
@@ -83,8 +84,11 @@ public class TableController {
             throw new UploadDisabledException();
         }
         validateName(name);
-        if (catalog.tableCount() >= properties.upload().maxTables()) {
-            throw new TableLimitExceededException(properties.upload().maxTables());
+        int maxTables = properties.upload().maxTables();
+        // Cheap pre-check to reject an over-cap upload before streaming its body; the authoritative
+        // check is re-done atomically with the register below, so this is only an optimisation.
+        if (catalog.tableCount() >= maxTables) {
+            throw new TableLimitExceededException(maxTables);
         }
 
         Path target = resolveSafeTarget(name);
@@ -96,21 +100,28 @@ public class TableController {
             // 500 — that would make the table un-re-uploadable (409) yet reported as failed.
             long rowCount = countDataRows(target);
 
-            boolean registered;
+            CatalogFacade.RegistrationOutcome outcome;
             try {
-                registered = catalog.register(name, target);
+                outcome = catalog.registerIfUnderCap(name, target, maxTables);
             } catch (QueryExecutionException e) {
                 // Malformed CSV (DATA_ERROR) on the upload path is a client error (400), not a
                 // 500; strip any server path from the message before returning it.
                 throw new InvalidUploadException(sanitize(e.getMessage(), target));
             }
-            if (!registered) {
+            // The cap re-check ran under the catalog lock, so a race winner that pushed us to the
+            // ceiling between the pre-check and here is caught: 507, no overshoot.
+            if (outcome == CatalogFacade.RegistrationOutcome.OVER_CAP) {
+                throw new TableLimitExceededException(maxTables);
+            }
+            if (outcome == CatalogFacade.RegistrationOutcome.NAME_TAKEN) {
                 throw new TableAlreadyExistsException(name);
             }
 
             // Registration succeeded; nothing below may throw, so the backing file must survive.
             keep = true;
-            return new UploadResponse(name, toDto(catalog.columnsOf(name)), rowCount);
+            List<CatalogFacade.TableColumn> columns = catalog.columnsOf(name).orElseThrow(
+                    () -> new IllegalStateException("Table '" + name + "' vanished after register"));
+            return new UploadResponse(name, toDto(columns), rowCount);
         } finally {
             if (!keep) {
                 Files.deleteIfExists(target);
@@ -156,9 +167,16 @@ public class TableController {
         }
     }
 
+    /**
+     * Data-row count for the upload response. Parses with the engine's exact CSV dialect
+     * ({@link CsvFormats#TABLE}) rather than counting physical lines, so a quoted field containing
+     * a newline is one record and the count agrees with what {@code SELECT COUNT(*)} would scan —
+     * including whitespace-padded multiline quoted fields, which only match when the same
+     * {@code ignoreSurroundingSpaces} dialect is used.
+     */
     private static long countDataRows(Path csv) throws IOException {
-        try (Stream<String> lines = Files.lines(csv)) {
-            return Math.max(0, lines.count() - 1); // drop the header row
+        try (CSVParser parser = CSVParser.parse(csv, StandardCharsets.UTF_8, CsvFormats.TABLE)) {
+            return Math.max(0, parser.stream().count() - 1); // first record is the header row
         }
     }
 

@@ -1,5 +1,6 @@
 package com.github.jinba1.cuckoodb.server.web;
 
+import static com.github.jinba1.cuckoodb.server.TestFiles.deleteRecursively;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -10,7 +11,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -86,6 +86,27 @@ class UploadApiIntegrationTest {
     }
 
     @Test
+    void embeddedNewlineInQuotedFieldCountsAsOneRow() throws Exception {
+        // A quoted field containing a newline is ONE CSV record per RFC4180, not two lines;
+        // rowCount must agree with what SELECT COUNT(*) would scan.
+        ResponseEntity<String> resp = csv("/tables/Notes", "note\n\"line1\nline2\"\n");
+        assertEquals(201, resp.getStatusCode().value(), resp.getBody());
+        assertEquals(1, JSON.readTree(resp.getBody()).get("rowCount").asInt(),
+                "embedded-newline quoted field must count as a single data row");
+    }
+
+    @Test
+    void whitespacePaddedMultilineQuotedFieldMatchesEngineRowCount() throws Exception {
+        // Leading/trailing whitespace around a quoted field with an embedded newline: the engine's
+        // ignoreSurroundingSpaces dialect treats this as ONE record, so rowCount must too — plain
+        // RFC4180 would mis-split it into two.
+        ResponseEntity<String> resp = csv("/tables/Padded", "note\n  \"l1\nl2\"  \n");
+        assertEquals(201, resp.getStatusCode().value(), resp.getBody());
+        assertEquals(1, JSON.readTree(resp.getBody()).get("rowCount").asInt(),
+                "whitespace-padded multiline quoted field must count as one row, matching the engine");
+    }
+
+    @Test
     void oversizeUploadReturns413() {
         String big = "n\n" + "1\n".repeat(40); // ~82 bytes > 64-byte cap
         ResponseEntity<String> resp = csv("/tables/Big", big);
@@ -132,20 +153,5 @@ class UploadApiIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(contentType);
         return rest.exchange(path, method, new HttpEntity<>(body, headers), String.class);
-    }
-
-    private static void deleteRecursively(Path root) throws IOException {
-        if (root == null || !Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                    // best-effort temp cleanup
-                }
-            });
-        }
     }
 }

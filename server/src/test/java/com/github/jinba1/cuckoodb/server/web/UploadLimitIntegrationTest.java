@@ -1,5 +1,6 @@
 package com.github.jinba1.cuckoodb.server.web;
 
+import static com.github.jinba1.cuckoodb.server.TestFiles.deleteRecursively;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -8,7 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -73,20 +73,5 @@ class UploadLimitIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(TEXT_CSV);
         return rest.postForEntity(path, new HttpEntity<>(body, headers), String.class);
-    }
-
-    private static void deleteRecursively(Path root) throws IOException {
-        if (root == null || !Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                    // best-effort temp cleanup
-                }
-            });
-        }
     }
 }

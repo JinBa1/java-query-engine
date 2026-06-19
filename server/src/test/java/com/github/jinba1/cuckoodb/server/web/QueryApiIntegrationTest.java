@@ -1,5 +1,6 @@
 package com.github.jinba1.cuckoodb.server.web;
 
+import static com.github.jinba1.cuckoodb.server.TestFiles.deleteRecursively;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -12,7 +13,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -166,20 +166,5 @@ class QueryApiIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(contentType);
         return rest.exchange(path, method, new HttpEntity<>(body, headers), String.class);
-    }
-
-    private static void deleteRecursively(Path root) throws IOException {
-        if (root == null || !Files.exists(root)) {
-            return;
-        }
-        try (var paths = Files.walk(root)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try {
-                    Files.deleteIfExists(p);
-                } catch (IOException ignored) {
-                    // best-effort temp cleanup
-                }
-            });
-        }
     }
 }

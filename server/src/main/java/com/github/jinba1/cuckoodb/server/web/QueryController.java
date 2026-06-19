@@ -6,6 +6,7 @@ import com.github.jinba1.cuckoodb.server.query.QueryServiceResult;
 import com.github.jinba1.cuckoodb.server.web.dto.QueryRequest;
 import com.github.jinba1.cuckoodb.server.web.dto.QueryResponse;
 
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,7 +31,9 @@ public class QueryController {
         this.principalResolver = principalResolver;
     }
 
-    @PostMapping
+    // JSON-only gateway: pin consumes so the body is never silently parsed as another on-classpath
+    // format (e.g. YAML), and so a wrong Content-Type yields a 415 hint naming exactly JSON.
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public QueryResponse query(@RequestBody QueryRequest request, HttpServletRequest httpRequest) {
         String principal = principalResolver.resolve(httpRequest);
         QueryServiceResult result = queryService.execute(

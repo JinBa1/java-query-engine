@@ -10,6 +10,7 @@ import com.github.jinba1.cuckoodb.ColumnType;
 import com.github.jinba1.cuckoodb.server.catalog.CatalogFacade;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,9 +47,9 @@ class TableControllerTest {
 
     @Test
     void describeReturnsStaticTypedSchema() throws Exception {
-        when(catalog.columnsOf("Student")).thenReturn(List.of(
+        when(catalog.columnsOf("Student")).thenReturn(Optional.of(List.of(
                 new CatalogFacade.TableColumn("a", ColumnType.INT),
-                new CatalogFacade.TableColumn("name", ColumnType.STRING)));
+                new CatalogFacade.TableColumn("name", ColumnType.STRING))));
         mvc.perform(get("/tables/Student"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Student"))
@@ -59,7 +60,7 @@ class TableControllerTest {
 
     @Test
     void describeMissingTableReturns404() throws Exception {
-        when(catalog.columnsOf("Ghost")).thenReturn(null);
+        when(catalog.columnsOf("Ghost")).thenReturn(Optional.empty());
         mvc.perform(get("/tables/Ghost"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("UNKNOWN_TABLE"));

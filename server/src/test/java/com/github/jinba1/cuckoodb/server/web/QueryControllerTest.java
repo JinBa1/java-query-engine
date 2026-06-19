@@ -213,4 +213,28 @@ class QueryControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
     }
+
+    @Test
+    void yamlBodyOnQueriesIsRejectedAsJsonOnly() throws Exception {
+        // /queries is a JSON-only gateway; a YAML body must not be silently parsed even though
+        // jackson-dataformat-yaml is on the classpath.
+        mvc.perform(post("/queries").contentType(MediaType.parseMediaType("application/yaml"))
+                        .content("sql: \"SELECT 1\""))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.errorCode").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("yaml"))));
+    }
+
+    @Test
+    void wrongContentTypeOnQueriesGivesEndpointSpecificHint() throws Exception {
+        // The 415 handler is global, so its hint must reflect THIS endpoint's accepted types
+        // (JSON for /queries), never the upload endpoint's text/csv.
+        mvc.perform(post("/queries").contentType(MediaType.TEXT_PLAIN).content(body("SELECT 1")))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.errorCode").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("json")))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("text/csv"))));
+    }
 }
