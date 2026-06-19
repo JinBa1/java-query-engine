@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,7 +23,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -42,6 +43,7 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@AutoConfigureTestRestTemplate
 class QueryApiIntegrationTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -81,11 +83,11 @@ class QueryApiIntegrationTest {
         JsonNode body = postQuery("{\"sql\":\"SELECT * FROM People\"}", 200);
         assertEquals(3, body.get("rowCount").asInt());
         assertFalse(body.get("truncated").asBoolean());
-        assertEquals("id", body.get("columns").get(0).get("name").asText());
-        assertEquals("INT", body.get("columns").get(0).get("type").asText());
-        assertEquals("STRING", body.get("columns").get(1).get("type").asText());
+        assertEquals("id", body.get("columns").get(0).get("name").asString());
+        assertEquals("INT", body.get("columns").get(0).get("type").asString());
+        assertEquals("STRING", body.get("columns").get(1).get("type").asString());
         assertEquals(1, body.get("rows").get(0).get(0).asInt());
-        assertEquals("alice", body.get("rows").get(0).get(1).asText());
+        assertEquals("alice", body.get("rows").get(0).get(1).asString());
     }
 
     @Test
@@ -99,7 +101,7 @@ class QueryApiIntegrationTest {
     @Test
     void explainReturnsPlanWithNoRowsAndNoRowCount() throws Exception {
         JsonNode body = postQuery("{\"sql\":\"EXPLAIN SELECT * FROM People\"}", 200);
-        assertTrue(body.get("explain").asText().contains("Plan (as written)"));
+        assertTrue(body.get("explain").asString().contains("Plan (as written)"));
         assertFalse(body.has("rows"), "EXPLAIN performs no execution, so rows is absent");
         assertFalse(body.has("rowCount"));
     }
@@ -107,7 +109,7 @@ class QueryApiIntegrationTest {
     @Test
     void unknownTableInQueryBodyIs422() throws Exception {
         JsonNode body = postQuery("{\"sql\":\"SELECT * FROM Nope\"}", 422);
-        assertEquals("UNKNOWN_TABLE", body.get("errorCode").asText());
+        assertEquals("UNKNOWN_TABLE", body.get("errorCode").asString());
     }
 
     @Test
@@ -124,7 +126,7 @@ class QueryApiIntegrationTest {
         assertFalse(raw.contains(dataDir.toString()), "5xx body leaked a filesystem path: " + raw);
         JsonNode body = JSON.readTree(raw);
         assertNotNull(body.get("errorId"), "5xx carries a correlation id");
-        assertEquals("Internal server error.", body.get("message").asText());
+        assertEquals("Internal server error.", body.get("message").asString());
     }
 
     @Test

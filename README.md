@@ -273,9 +273,9 @@ The test suite covers individual operators, the query planner, the optimiser, ex
 │       ├── db/data/                                 # CSV data files (header row + data rows)
 │       ├── input/query[1-20].sql                    # Sample queries
 │       └── expected_output/query[1-20].csv          # Expected results
-├── server/                                          # REST gateway skeleton — Spring Boot REST gateway planned
-│   ├── pom.xml                                      # cuckoodb-server (depends on cuckoodb-engine; no Spring yet)
-│   └── src/main/java/com/github/jinba1/cuckoodb/server/
+├── server/                                          # cuckoodb-server — Spring Boot REST gateway over the engine
+│   ├── pom.xml                                      # Spring Boot 4 (web MVC), springdoc/OpenAPI
+│   └── src/main/java/com/github/jinba1/cuckoodb/server/   # controllers, query service, catalog facade, config
 ├── mvnw / mvnw.cmd                                  # Maven Wrapper
 └── LICENSE
 ```

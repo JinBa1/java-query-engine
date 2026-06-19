@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,7 +16,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -33,6 +34,7 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@AutoConfigureTestRestTemplate
 class UploadApiIntegrationTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -67,10 +69,10 @@ class UploadApiIntegrationTest {
         ResponseEntity<String> upload = csv("/tables/Widgets", "sku,qty\nA,5\nB,7\n");
         assertEquals(201, upload.getStatusCode().value(), upload.getBody());
         JsonNode created = JSON.readTree(upload.getBody());
-        assertEquals("Widgets", created.get("name").asText());
+        assertEquals("Widgets", created.get("name").asString());
         assertEquals(2, created.get("rowCount").asInt());
-        assertEquals("qty", created.get("columns").get(1).get("name").asText());
-        assertEquals("INT", created.get("columns").get(1).get("type").asText());
+        assertEquals("qty", created.get("columns").get(1).get("name").asString());
+        assertEquals("INT", created.get("columns").get(1).get("type").asString());
 
         // The freshly uploaded table is immediately queryable.
         ResponseEntity<String> query = exchange("/queries", HttpMethod.POST,
@@ -82,7 +84,7 @@ class UploadApiIntegrationTest {
         ResponseEntity<String> describe = rest.getForEntity("/tables/Widgets", String.class);
         assertEquals(200, describe.getStatusCode().value());
         assertEquals("STRING", JSON.readTree(describe.getBody())
-                .get("columns").get(0).get("type").asText(), "sku column is string-typed");
+                .get("columns").get(0).get("type").asString(), "sku column is string-typed");
     }
 
     @Test
@@ -141,7 +143,7 @@ class UploadApiIntegrationTest {
         String raw = resp.getBody();
         assertNotNull(raw);
         assertFalse(raw.contains(workDir.toString()), "upload 400 leaked a work-dir path: " + raw);
-        assertEquals("DATA_ERROR", JSON.readTree(raw).get("errorCode").asText());
+        assertEquals("DATA_ERROR", JSON.readTree(raw).get("errorCode").asString());
     }
 
     private ResponseEntity<String> csv(String path, String body) {

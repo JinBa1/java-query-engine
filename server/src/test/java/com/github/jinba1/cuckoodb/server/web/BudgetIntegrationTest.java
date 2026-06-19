@@ -4,7 +4,7 @@ import static com.github.jinba1.cuckoodb.server.TestFiles.deleteRecursively;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,7 +14,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,6 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@AutoConfigureTestRestTemplate
 class BudgetIntegrationTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -67,8 +69,8 @@ class BudgetIntegrationTest {
         // which a 4-row scan exceeds. A 200 here would mean the unbounded path was reachable.
         ResponseEntity<String> resp = postQuery("{\"sql\":\"SELECT * FROM People\"}");
         assertEquals(429, resp.getStatusCode().value(), resp.getBody());
-        assertEquals("BUDGET_EXCEEDED", JSON.readTree(resp.getBody()).get("errorCode").asText());
-        assertTrue(resp.getHeaders().containsKey("Retry-After"));
+        assertEquals("BUDGET_EXCEEDED", JSON.readTree(resp.getBody()).get("errorCode").asString());
+        assertTrue(resp.getHeaders().containsHeader("Retry-After"));
     }
 
     @Test
@@ -77,7 +79,7 @@ class BudgetIntegrationTest {
         ResponseEntity<String> resp = postQuery(
                 "{\"sql\":\"SELECT * FROM People\",\"maxTuples\":9999999}");
         assertEquals(429, resp.getStatusCode().value(), resp.getBody());
-        assertEquals("BUDGET_EXCEEDED", JSON.readTree(resp.getBody()).get("errorCode").asText());
+        assertEquals("BUDGET_EXCEEDED", JSON.readTree(resp.getBody()).get("errorCode").asString());
     }
 
     @Test
@@ -85,7 +87,7 @@ class BudgetIntegrationTest {
         // EXPLAIN performs no execution, so the tiny budget never bites: a plan comes back 200.
         ResponseEntity<String> resp = postQuery("{\"sql\":\"EXPLAIN SELECT * FROM People\"}");
         assertEquals(200, resp.getStatusCode().value(), resp.getBody());
-        assertTrue(JSON.readTree(resp.getBody()).get("explain").asText().contains("Plan"));
+        assertTrue(JSON.readTree(resp.getBody()).get("explain").asString().contains("Plan"));
     }
 
     private ResponseEntity<String> postQuery(String json) {

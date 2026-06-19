@@ -23,8 +23,11 @@
   -->
 
   <properties>
-    <spring-boot.version>3.4.1</spring-boot.version>
-    <springdoc.version>2.7.0</springdoc.version>
+    <spring-boot.version>4.0.7</spring-boot.version>
+    <!-- springdoc 3.0.3 is the Boot-4/Jackson-3 line; verified compatible with Boot 4.0.7
+         (full @SpringBootTest contexts load with springdoc auto-config; no MVC API-versioning,
+         so springdoc #3163 does not apply). -->
+    <springdoc.version>3.0.3</springdoc.version>
   </properties>
 
   <dependencyManagement>
@@ -47,7 +50,7 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-web</artifactId>
+      <artifactId>spring-boot-starter-webmvc</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springdoc</groupId>
@@ -57,6 +60,34 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+      Boot 4 split the @WebMvcTest slice out of spring-boot-starter-test into a per-technology
+      test starter; QueryControllerTest/TableControllerTest need it for the controller slice.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+      Boot 4 relocated TestRestTemplate/RestTestClient to org.springframework.boot.resttestclient
+      and no longer auto-configures the client under @SpringBootTest. The 4 RANDOM_PORT integration
+      tests keep TestRestTemplate (behaviour-preserving) via this dependency + @AutoConfigureTestRestTemplate.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-resttestclient</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+      TestRestTemplate's auto-config needs org.springframework.boot.restclient.RestTemplateBuilder,
+      which spring-boot-resttestclient does not pull transitively (Boot #48588) — declare it explicitly.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-restclient</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
