@@ -1,5 +1,6 @@
 package com.github.jinba1.cuckoodb.operator;
 
+import com.github.jinba1.cuckoodb.ErrorCode;
 import com.github.jinba1.cuckoodb.PlanContext;
 import com.github.jinba1.cuckoodb.QueryBudget;
 import com.github.jinba1.cuckoodb.QueryExecutionException;
@@ -200,6 +201,14 @@ public abstract class Operator {
         }
 
         for (Column column : columns) {
+            // The engine resolves columns by table qualifier throughout (schema keys are
+            // table.column). An unqualified reference leaves getTable() null and would deref to an
+            // opaque NPE, so reject it legibly at plan time — mirroring the aggregate-argument rule.
+            if (column.getTable() == null || column.getTable().getName() == null) {
+                throw new QueryExecutionException(ErrorCode.UNSUPPORTED_SQL,
+                        "Column references must use qualified names (table.column): '"
+                                + column.getColumnName() + "'");
+            }
             String tableName = column.getTable().getName();
             String columnName = column.getColumnName();
 

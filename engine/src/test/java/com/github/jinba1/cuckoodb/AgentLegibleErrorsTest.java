@@ -78,6 +78,18 @@ public class AgentLegibleErrorsTest {
     }
 
     @Test
+    public void selectUnqualifiedColumnFailsAtPlanTimeWithLegibleError() throws IOException {
+        // 'sid' is a real Student column, but referenced without a table qualifier. The engine
+        // resolves columns by qualifier throughout, so an unqualified ref used to dereference a
+        // null table and die with an opaque NPE (surfacing as a scrubbed 500). It must instead be
+        // a legible plan-time error, mirroring the aggregate path's "qualified column names" rule.
+        QueryExecutionException ex = assertPlanFails("SELECT sid FROM Student");
+        assertEquals(ErrorCode.UNSUPPORTED_SQL, ex.code());
+        assertTrue(ex.getMessage().contains("qualified"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("sid"), ex.getMessage());
+    }
+
+    @Test
     public void whereUnknownColumnInJoinQueryFailsAtPlanTime() throws IOException {
         QueryExecutionException ex = assertPlanFails(
                 "SELECT * FROM Student, Course WHERE Student.nam = Course.cid");
