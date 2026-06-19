@@ -1,6 +1,5 @@
 package com.github.jinba1.cuckoodb;
 
-import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
@@ -139,10 +138,7 @@ public class DBCatalog {
      * an all-INT table until rows arrive.
      */
     private static TableMeta parseTable(String tableName, Path csv) throws IOException {
-        CSVFormat format = CSVFormat.RFC4180.builder()
-                .setIgnoreSurroundingSpaces(true)
-                .build();
-        try (CSVParser parser = CSVParser.parse(csv, StandardCharsets.UTF_8, format)) {
+        try (CSVParser parser = CSVParser.parse(csv, StandardCharsets.UTF_8, CsvFormats.TABLE)) {
             Iterator<CSVRecord> it = parser.iterator();
             if (!it.hasNext()) {
                 throw new QueryExecutionException(ErrorCode.DATA_ERROR,

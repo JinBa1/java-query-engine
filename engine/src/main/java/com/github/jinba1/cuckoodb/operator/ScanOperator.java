@@ -1,6 +1,7 @@
 package com.github.jinba1.cuckoodb.operator;
 
 import com.github.jinba1.cuckoodb.ColumnType;
+import com.github.jinba1.cuckoodb.CsvFormats;
 import com.github.jinba1.cuckoodb.DBCatalog;
 import com.github.jinba1.cuckoodb.ErrorCode;
 import com.github.jinba1.cuckoodb.IntValue;
@@ -11,7 +12,6 @@ import com.github.jinba1.cuckoodb.TableMeta;
 import com.github.jinba1.cuckoodb.Tuple;
 import com.github.jinba1.cuckoodb.Value;
 
-import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
@@ -65,10 +65,7 @@ public class ScanOperator extends Operator {
      */
     private void openReader() {
         try {
-            CSVFormat format = CSVFormat.RFC4180.builder()
-                    .setIgnoreSurroundingSpaces(true)
-                    .build();
-            parser = CSVParser.parse(tablePath, StandardCharsets.UTF_8, format);
+            parser = CSVParser.parse(tablePath, StandardCharsets.UTF_8, CsvFormats.TABLE);
             records = parser.iterator();
             if (records.hasNext()) {
                 records.next(); // skip header row
