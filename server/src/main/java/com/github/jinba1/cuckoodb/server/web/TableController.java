@@ -3,8 +3,9 @@ package com.github.jinba1.cuckoodb.server.web;
 import com.github.jinba1.cuckoodb.CsvFormats;
 import com.github.jinba1.cuckoodb.QueryExecutionException;
 import com.github.jinba1.cuckoodb.server.catalog.CatalogFacade;
+import com.github.jinba1.cuckoodb.server.catalog.CatalogMapper;
+import com.github.jinba1.cuckoodb.server.catalog.TableNameValidator;
 import com.github.jinba1.cuckoodb.server.config.CuckooDbProperties;
-import com.github.jinba1.cuckoodb.server.web.dto.TableColumnDto;
 import com.github.jinba1.cuckoodb.server.web.dto.TableSchemaResponse;
 import com.github.jinba1.cuckoodb.server.web.dto.UploadResponse;
 
@@ -27,10 +28,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * Table catalog endpoints: list tables, describe a table's static typed schema, and (opt-in)
@@ -42,9 +41,6 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping("/tables")
 public class TableController {
-
-    /** The only table names the server will touch; blocks path traversal and odd characters. */
-    private static final Pattern VALID_NAME = Pattern.compile("^[A-Za-z0-9_]{1,64}$");
 
     private final CatalogFacade catalog;
     private final CuckooDbProperties properties;
@@ -63,10 +59,10 @@ public class TableController {
     /** {@code GET /tables/{name}} — a table's static, catalog-authoritative typed schema. */
     @GetMapping("/{name}")
     public TableSchemaResponse describe(@PathVariable String name) {
-        validateName(name);
+        TableNameValidator.validate(name);
         List<CatalogFacade.TableColumn> columns = catalog.columnsOf(name)
                 .orElseThrow(() -> new TableNotFoundException(name));
-        return new TableSchemaResponse(name, toDto(columns));
+        return new TableSchemaResponse(name, CatalogMapper.toDto(columns));
     }
 
     /**
@@ -83,7 +79,7 @@ public class TableController {
         if (!properties.upload().enabled()) {
             throw new UploadDisabledException();
         }
-        validateName(name);
+        TableNameValidator.validate(name);
         int maxTables = properties.upload().maxTables();
         // Cheap pre-check to reject an over-cap upload before streaming its body; the authoritative
         // check is re-done atomically with the register below, so this is only an optimisation.
@@ -121,18 +117,11 @@ public class TableController {
             keep = true;
             List<CatalogFacade.TableColumn> columns = catalog.columnsOf(name).orElseThrow(
                     () -> new IllegalStateException("Table '" + name + "' vanished after register"));
-            return new UploadResponse(name, toDto(columns), rowCount);
+            return new UploadResponse(name, CatalogMapper.toDto(columns), rowCount);
         } finally {
             if (!keep) {
                 Files.deleteIfExists(target);
             }
-        }
-    }
-
-    private void validateName(String name) {
-        if (name == null || !VALID_NAME.matcher(name).matches()) {
-            throw new IllegalArgumentException(
-                    "Invalid table name '" + name + "'; must match [A-Za-z0-9_]{1,64}.");
         }
     }
 
@@ -187,13 +176,5 @@ public class TableController {
         // target is already absolute (resolveSafeTarget normalises against an absolute base),
         // so target.toString() is the exact path the engine embeds in its messages.
         return message.replace(target.toString(), "<upload>");
-    }
-
-    private static List<TableColumnDto> toDto(List<CatalogFacade.TableColumn> columns) {
-        List<TableColumnDto> dtos = new ArrayList<>(columns.size());
-        for (CatalogFacade.TableColumn c : columns) {
-            dtos.add(new TableColumnDto(c.name(), c.type() == null ? null : c.type().name()));
-        }
-        return dtos;
     }
 }

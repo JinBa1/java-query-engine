@@ -28,6 +28,8 @@
          (full @SpringBootTest contexts load with springdoc auto-config; no MVC API-versioning,
          so springdoc #3163 does not apply). -->
     <springdoc.version>3.0.3</springdoc.version>
+    <!-- Spring AI 2.0.0 (GA 2026-06-12) targets Boot 4.0/4.1 + Framework 7; MCP spec 2025-11-25. -->
+    <spring-ai.version>2.0.0</spring-ai.version>
   </properties>
 
   <dependencyManagement>
@@ -36,6 +38,13 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
         <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-bom</artifactId>
+        <version>${spring-ai.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -56,6 +65,15 @@
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
       <version>${springdoc.version}</version>
+    </dependency>
+    <!--
+      Spring AI MCP server over the WebMvc Streamable-HTTP transport. Version managed by
+      spring-ai-bom (no explicit <version>). Pulls the relocated org.springframework.ai:mcp-spring-webmvc
+      transport transitively; do NOT declare that directly.
+    -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
