@@ -97,6 +97,21 @@ java -cp engine/target/cuckoodb-engine-1.0.0-jar-with-dependencies.jar \
 
 Both `--max-tuples` and `--timeout-ms` are optional and independent. Omit either to impose no limit on that dimension.
 
+### Run the server as a container
+
+The Spring Boot gateway (REST + MCP) ships as a container image, so you can run it next to your data with no Java toolchain. Put your CSV files in a folder and mount it as the catalog's data directory:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v /path/to/your/csvs:/cuckoodb/data \
+  ghcr.io/jinba1/cuckoodb:latest
+```
+
+- **REST:** `POST http://localhost:8080/queries`, `GET /tables`, `GET /tables/{name}` (OpenAPI at `/swagger-ui.html`).
+- **MCP:** Streamable-HTTP endpoint at `http://localhost:8080/mcp` — point an MCP client at it to query your CSVs with `list_tables` / `describe_table` / `sample_rows` / `explain_query` / `query`.
+
+The image is published to GHCR on each merge to `main`. To build it locally instead: `docker build -t cuckoodb .`
+
 ### Query budgets
 
 The engine enforces **total-work semantics**: every tuple emitted by any operator in the tree counts against the budget, including intermediate tuples that are later filtered or joined. A cross-product explosion that never produces output rows will still hit the tuple limit. The timeout clock starts lazily at the first tuple emission.
