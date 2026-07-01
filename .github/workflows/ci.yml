@@ -25,7 +25,7 @@ jobs:
         # spring-boot-maven-plugin repackage, so a broken boot jar can't ship.
         run: ./mvnw clean package
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: engine/target/site/jacoco/jacoco.xml
