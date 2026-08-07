@@ -75,20 +75,20 @@ This document contains quantifiable performance results from the query optimizat
 
 ## Summary for Resume
 
-> "Reduced scan-level tuple processing by **23-57%** on multi-table join queries through rule-based query optimisations including selection pushdown and projection pushdown, validated by 225 JUnit tests covering operators, optimiser rules, and end-to-end query output."
+> "Reduced scan-level tuple processing by **23-57%** on multi-table join queries through rule-based query optimisations including selection pushdown and projection pushdown, validated by focused optimizer benchmarks and guarded by the current 419-test engine suite."
 
 ## Implementation Details
 
 - **Benchmark Class**: `QueryOptimizationBenchmarkTest.java`
-- **Tuple Counters**: Added to all 7 operator types (`Scan`, `Select`, `Project`, `Join`, `Sort`, `DuplicateElimination`, `Sum`)
-- **Optimization Toggle**: `Constants.useQueryOptimization` changed from `final` to mutable for benchmark comparison
-- **New Sample Queries**: query13.sql through query16.sql demonstrating optimization scenarios
-- **Test Count**: 225 total (190 original + 35 new benchmark tests)
+- **Tuple Counters**: All concrete operators count emitted tuples through `Operator.countTuple()` (`Scan`, `Select`, `Project`, `Join` / `HashJoin`, `Sort`, `Aggregate`, `DuplicateElimination`, `Limit`)
+- **Optimization Toggle**: Benchmarks pass per-query `QueryConfig` values to `QueryPlanner` instead of mutating global flags
+- **Sample Queries**: query13.sql through query16.sql demonstrate optimization scenarios; query20 demonstrates EXPLAIN
+- **Current Test Gate**: 419 engine tests, including 36 `QueryOptimizationBenchmarkTest` cases, plus the 20-query byte-identical sample gate
 
 ## Running Benchmarks
 
 ```bash
-./mvnw test -Dtest=QueryOptimizationBenchmarkTest
+./mvnw -pl engine test -Dtest=QueryOptimizationBenchmarkTest
 ```
 
 Or run all tests:

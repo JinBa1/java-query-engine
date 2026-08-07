@@ -11,7 +11,7 @@ SQL → JSqlParser → QueryPlanner → QueryPlanOptimizer → Operator Tree →
 | Component | Role |
 |-----------|------|
 | `QueryPlanner` | Parses SQL and builds the operator pipeline |
-| `QueryPlanOptimizer` | Selection pushdown, trivial operator removal |
+| `QueryPlanOptimizer` | Selection pushdown, projection pushdown, trivial operator removal, consecutive-select merging |
 | `DBCatalog` | Schema and table metadata (singleton) |
 | `Value` | Typed tuple values (sealed interface: `IntValue`, `StringValue`) |
 | `ExpressionEvaluator` | Evaluates WHERE/HAVING conditions per tuple |
@@ -107,7 +107,7 @@ The planner selects between two join algorithms automatically.
 
 **Hash** (`HashJoinOperator extends JoinOperator`): the inner (build) side is drained once into a `HashMap` keyed by the equality conjuncts; the outer (probe) side streams through once. After a lookup, the full original condition is re-evaluated on every candidate, so residual non-equality conjuncts (e.g. `A.x = B.x AND A.y > 3`) work. Output order is identical to nested-loop (outer-major, inner order preserved per key bucket). Shown as `HashJoin[<condition>]`.
 
-**Auto-selection:** hash join is used when `Constants.useHashJoin` is `true` (default) **and** the condition has at least one column-to-column equality conjunct. Cross products and pure non-equi joins always use nested-loop. Set `Constants.useHashJoin = false` to force nested-loop everywhere.
+**Auto-selection:** hash join is used when the per-query `QueryConfig.useHashJoin` flag is `true` (the production default) **and** the condition has at least one column-to-column equality conjunct. Cross products and pure non-equi joins always use nested-loop. Tests and benchmarks can pass `new QueryConfig(true, false)` to `QueryPlanner` to force nested-loop everywhere without mutating global state.
 
 ### Benchmarks
 
